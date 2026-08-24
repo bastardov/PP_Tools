@@ -49,7 +49,9 @@ from Autodesk.Revit.DB.Mechanical import *
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from Autodesk.Revit.Exceptions import OperationCanceledException
 
-from pyrevit import forms, script
+from pyrevit import script
+
+import pp_wpf
 
 from pp_settings import load_settings
 
@@ -1062,6 +1064,19 @@ def process_floor(floor):
 
 # ─── ОСНОВНОЙ ЗАПУСК ─────────────────────────────────────────
 
+TOOL_TITLE = u"Перенос данных из пространств"
+
+
+class Stop(Exception):
+    pass
+
+
+def fail(message, title):
+    u"""Показать окно ошибки и прервать сценарий."""
+    pp_wpf.show_report(message, title=title, subtitle=TOOL_TITLE, is_error=True)
+    raise Stop()
+
+
 try:
     # ── Проверка: включён ли расчёт объёмов ───────────────────
     # Без него GetSpaceAtPoint не находит пространства по 3D-точке,
@@ -1069,14 +1084,15 @@ try:
     try:
         avs = AreaVolumeSettings.GetAreaVolumeSettings(doc)
         if not avs.ComputeVolumes:
-            forms.alert(
+            pp_wpf.show_report(
                 u"В проекте ОТКЛЮЧЁН расчёт объёмов!\n\n"
                 u"Поиск пространств по точкам работать не будет — "
                 u"все элементы пойдут через неточный fallback.\n\n"
                 u"Включите: вкладка «Анализ» → панель «Пространства и зоны» → "
                 u"«Параметры площадей и объёмов» → «Площади и объёмы».\n\n"
                 u"Рекомендуется включить и запустить инструмент заново.",
-                title=u"Перенос данных из пространств"
+                title=u"Расчёт объёмов отключён",
+                subtitle=TOOL_TITLE
             )
     except:
         pass
@@ -1091,11 +1107,7 @@ try:
                 if doc.GetElement(r.ElementId) is not None]
 
     if not elements:
-        forms.alert(
-            u"Элементы не выбраны.",
-            title=u"Перенос данных из пространств",
-            exitscript=True
-        )
+        fail(u"Элементы не выбраны.", u"Нечего обрабатывать")
 
     # ── Разбивка выбранных элементов по типам ─────────────────
     basic_walls   = []
@@ -1293,7 +1305,14 @@ try:
             pass
 
     # Итоговое белое окно — показываем всегда по завершении.
-    forms.alert(message, title=u"Перенос данных из пространств")
+    pp_wpf.show_report(
+        message,
+        title=u"Готово",
+        subtitle=TOOL_TITLE
+    )
+
+except Stop:
+    pass
 
 except OperationCanceledException:
     pass
@@ -1303,7 +1322,9 @@ except Exception as ex:
         t.RollBack()
     except:
         pass
-    forms.alert(
-        u"Ошибка:\n\n{}".format(unicode(ex)),
-        title=u"Перенос данных из пространств"
+    pp_wpf.show_report(
+        unicode(ex),
+        title=u"Ошибка",
+        subtitle=TOOL_TITLE,
+        is_error=True
     )

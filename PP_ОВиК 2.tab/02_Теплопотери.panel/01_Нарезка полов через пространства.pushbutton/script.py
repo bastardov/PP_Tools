@@ -30,7 +30,7 @@ from Autodesk.Revit.DB.Mechanical import Space as MEPSpace
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from Autodesk.Revit.Exceptions import OperationCanceledException
 
-from pyrevit import forms
+import pp_wpf
 
 
 doc = __revit__.ActiveUIDocument.Document
@@ -214,6 +214,19 @@ def get_floor_offset(floor):
 # ЗАПУСК
 # ─────────────────────────────────────────────
 
+TOOL_TITLE = u"Нарезка полов по пространствам"
+
+
+class Stop(Exception):
+    pass
+
+
+def fail(message, title):
+    u"""Показать окно ошибки и прервать сценарий."""
+    pp_wpf.show_report(message, title=title, subtitle=TOOL_TITLE, is_error=True)
+    raise Stop()
+
+
 try:
     refs = uidoc.Selection.PickObjects(
         ObjectType.Element,
@@ -230,11 +243,7 @@ try:
             spaces.append(el)
 
     if not spaces:
-        forms.alert(
-            u"Пространства не выбраны.",
-            title=u"Нарезка полов по пространствам",
-            exitscript=True
-        )
+        fail(u"Пространства не выбраны.", u"Нечего обрабатывать")
 
     created_floors = []
     source_slabs = []
@@ -347,10 +356,14 @@ try:
     if len(created_floors) == 0:
         msg += u"\n\nПервые строки лога:\n" + u"\n".join(log[:25])
 
-    forms.alert(
+    pp_wpf.show_report(
         msg,
-        title=u"Нарезка полов по пространствам"
+        title=u"Готово",
+        subtitle=TOOL_TITLE
     )
+
+except Stop:
+    pass
 
 except OperationCanceledException:
     pass
@@ -362,7 +375,9 @@ except Exception as ex:
     except:
         pass
 
-    forms.alert(
-        u"Ошибка:\n\n{}".format(unicode(ex)),
-        title=u"Нарезка полов по пространствам"
+    pp_wpf.show_report(
+        unicode(ex),
+        title=u"Ошибка",
+        subtitle=TOOL_TITLE,
+        is_error=True
     )
