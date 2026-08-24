@@ -1,39 +1,38 @@
 @echo off
-chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
-rem PP_Tools — сохранить текущее состояние плагина в git.
-rem Заменяет ручное копирование папок в BACKUPS.
+rem PP_Tools - sohranit tekushchee sostoyanie plagina v git.
+rem Zamenyaet ruchnoe kopirovanie papok v BACKUPS.
 
 where git >nul 2>nul
 if errorlevel 1 (
-    echo [Ошибка] Git не найден. Установите Git for Windows: https://git-scm.com/download/win
+    echo [�訡��] Git �� ������. ��⠭���� Git for Windows: https://git-scm.com/download/win
     pause
     exit /b 3
 )
 
 git rev-parse --git-dir >nul 2>nul
 if errorlevel 1 (
-    echo [Ошибка] В этой папке нет git-репозитория.
+    echo [�訡��] � �⮩ ����� ��� git-९������.
     pause
     exit /b 3
 )
 
 echo.
-echo === Что изменилось с прошлого сохранения ===
+echo === �� ���������� � ��諮�� ��࠭���� ===
 git status --short
 echo.
 
 set "MSG=%*"
-if "%MSG%"=="" set /p MSG=Опишите правку одной строкой: 
-if "%MSG%"=="" set "MSG=Правки без описания"
+if "%MSG%"=="" set /p MSG=����� �ࠢ�� ����� ��ப��: 
+if "%MSG%"=="" set "MSG=�ࠢ�� ��� ���ᠭ��"
 
 git add -A
 git commit -m "%MSG%"
 if errorlevel 1 (
     echo.
-    echo Сохранять было нечего либо коммит не прошёл.
+    echo ���࠭��� �뫮 ��祣� ���� ������ �� ����.
     pause
     exit /b 0
 )
@@ -44,11 +43,11 @@ git log --oneline -1
 git remote get-url origin >nul 2>nul
 if not errorlevel 1 (
     echo.
-    echo Отправляю на сервер...
+    echo ��ࠢ��� �� �ࢥ�...
     git push
-    if errorlevel 1 echo [Внимание] Отправка не прошла. Локально всё сохранено, отправите позже.
+    if errorlevel 1 echo [��������] ��ࠢ�� �� ��諠. �����쭮 ��� ��࠭���, ��ࠢ�� �����.
 )
 
 echo.
-echo Готово.
+echo ��⮢�.
 pause
