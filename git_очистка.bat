@@ -15,7 +15,7 @@ if errorlevel 1 (
 )
 
 echo Размер .git до уборки:
-for /f "usebackq" %%s in (`powershell -nop -c "'{0:N1} МБ' -f ((Get-ChildItem -Recurse -Force .git ^| Measure-Object Length -Sum).Sum/1MB)"`) do echo    %%s
+for /f "usebackq" %%s in (`powershell -nop -c "'{0:N1} MB' -f ((Get-ChildItem -Recurse -Force .git ^| Measure-Object Length -Sum).Sum/1MB)"`) do echo    %%s
 
 if exist ".git\_stale" rmdir /s /q ".git\_stale"
 del /q ".git\*.lock" 2>nul
@@ -29,7 +29,7 @@ git gc --prune=now --aggressive --quiet
 
 echo.
 echo Размер .git после уборки:
-for /f "usebackq" %%s in (`powershell -nop -c "'{0:N1} МБ' -f ((Get-ChildItem -Recurse -Force .git ^| Measure-Object Length -Sum).Sum/1MB)"`) do echo    %%s
+for /f "usebackq" %%s in (`powershell -nop -c "'{0:N1} MB' -f ((Get-ChildItem -Recurse -Force .git ^| Measure-Object Length -Sum).Sum/1MB)"`) do echo    %%s
 
 echo.
 echo Проверяю целостность...
