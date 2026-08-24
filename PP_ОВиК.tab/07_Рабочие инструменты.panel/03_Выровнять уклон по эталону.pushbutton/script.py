@@ -35,8 +35,10 @@ from Autodesk.Revit.DB.Plumbing import Pipe
 from Autodesk.Revit.UI.Selection import ISelectionFilter, ObjectType
 from Autodesk.Revit.Exceptions import OperationCanceledException
 
-from pyrevit import forms
 from pyrevit import script
+
+import pp_paint_dialog
+import pp_wpf
 
 
 doc = __revit__.ActiveUIDocument.Document
@@ -406,16 +408,25 @@ def main():
     ref_pipe = doc.GetElement(ref_sel.ElementId)
     target_z = reference_target_z(ref_pipe)
     if target_z is None:
-        forms.alert(u"Не удалось определить высоту эталона.", title=TITLE)
+        pp_wpf.show_report(
+            u"Не удалось определить высоту эталона.",
+            title=u"Эталон не читается",
+            subtitle=TITLE,
+            is_error=True)
         return
 
     zmin, zmax = pipe_axis_z_range(ref_pipe)
     if zmin is not None and (zmax - zmin) > CONNECT_TOL_FT:
-        cont = forms.alert(
-            u"Труба-эталон сама имеет уклон "
-            u"(перепад {0:.1f} мм). Взять её среднюю высоту?".format(
-                (zmax - zmin) / MM_TO_FT),
-            title=TITLE, yes=True, no=True)
+        cont = pp_paint_dialog.ask({
+            u"title": u"Эталон сам с уклоном",
+            u"subtitle": u"Труба-эталон имеет перепад {0:.1f} мм. "
+                         u"Выровнять остальные трубы по её средней "
+                         u"высоте?".format((zmax - zmin) / MM_TO_FT),
+            u"categories": [],
+            u"reset": False,
+            u"run_label": u"Взять среднюю высоту",
+            u"ready_label": u"Выравнивание по средней высоте эталона",
+        })
         if not cont:
             return
 
@@ -430,7 +441,11 @@ def main():
 
     pipe_ids = [pr.ElementId for pr in picks]
     if not pipe_ids:
-        forms.alert(u"Трубы не выбраны.", title=TITLE)
+        pp_wpf.show_report(
+            u"Трубы не выбраны.",
+            title=u"Нечего выравнивать",
+            subtitle=TITLE,
+            is_error=True)
         return
 
     # 3. Сеть фитингов
@@ -501,7 +516,7 @@ def main():
         lines.append(u"")
         lines.append(u"Подробности несостыковок — в _logs/flatten_slope.log")
 
-    forms.alert(u"\n".join(lines), title=TITLE)
+    pp_wpf.show_report(u"\n".join(lines), title=u"Готово", subtitle=TITLE)
 
 
 main()

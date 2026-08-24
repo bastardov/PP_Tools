@@ -11,7 +11,8 @@ clr.AddReference("System")
 
 from System.Collections.Generic import List
 from Autodesk.Revit.DB import FilteredElementCollector, FamilyInstance, ElementId
-from pyrevit import forms
+import pp_param_picker
+import pp_wpf
 
 from pp_settings import show_report
 
@@ -51,6 +52,19 @@ def get_element_info(el):
     )
 
 
+TOOL_TITLE = u"Найти контроллер"
+
+
+class Stop(Exception):
+    pass
+
+
+def fail(message, title):
+    u"""Показать окно ошибки и прервать сценарий."""
+    pp_wpf.show_report(message, title=title, subtitle=TOOL_TITLE, is_error=True)
+    raise Stop()
+
+
 try:
     controllers = []
 
@@ -66,12 +80,11 @@ try:
             pass
 
     if not controllers:
-        forms.alert(
+        fail(
             u"Контроллер не найден в проекте.\n\nИскомое семейство:\n{}".format(
                 CONTROLLER_FAMILY_NAME
             ),
-            title=u"Найти контроллер",
-            exitscript=True
+            u"Контроллер не найден"
         )
 
     target = None
@@ -87,18 +100,15 @@ try:
             label = get_element_info(el)
             items[label] = el
 
-        selected = forms.SelectFromList.show(
+        selected = pp_param_picker.ask(
             sorted(items.keys()),
             title=u"Найдено несколько контроллеров",
-            button_name=u"Выбрать"
+            subtitle=TOOL_TITLE,
+            empty_text=u"Список контроллеров пуст"
         )
 
         if not selected:
-            forms.alert(
-                u"Контроллер не выбран.",
-                title=u"Найти контроллер",
-                exitscript=True
-            )
+            raise Stop()
 
         target = items[selected]
         selected_from_list = True
@@ -124,15 +134,20 @@ try:
         warning_msg += u"\n\nПредупреждение:\nВ проекте найдено несколько контроллеров. Был выбран один из списка."
 
     show_report(
-        forms,
+        None,
         u"Найти контроллер",
         success_msg,
         warning_msg,
         len(controllers) > 1
     )
 
+except Stop:
+    pass
+
 except Exception as ex:
-    forms.alert(
-        u"Ошибка:\n\n{}".format(unicode(ex)),
-        title=u"Найти контроллер"
+    pp_wpf.show_report(
+        unicode(ex),
+        title=u"Ошибка",
+        subtitle=TOOL_TITLE,
+        is_error=True
     )

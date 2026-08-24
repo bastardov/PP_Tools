@@ -12,7 +12,7 @@ from Autodesk.Revit.DB import *
 from Autodesk.Revit.UI.Selection import ISelectionFilter, ObjectType
 from Autodesk.Revit.Exceptions import OperationCanceledException
 
-from pyrevit import forms
+import pp_wpf
 
 
 doc = __revit__.ActiveUIDocument.Document
@@ -159,6 +159,19 @@ def create_section_box_from_bbox(bbox, offset_xy_ft, offset_z_ft):
 # ЗАПУСК
 # ─────────────────────────────────────────────
 
+TOOL_TITLE = u"Создать 3D вид коллектора"
+
+
+class Stop(Exception):
+    pass
+
+
+def fail(message, title):
+    u"""Показать окно ошибки и прервать сценарий."""
+    pp_wpf.show_report(message, title=title, subtitle=TOOL_TITLE, is_error=True)
+    raise Stop()
+
+
 try:
     refs = uidoc.Selection.PickObjects(
         ObjectType.Element,
@@ -174,19 +187,15 @@ try:
             elements.append(el)
 
     if not elements:
-        forms.alert(
-            u"Коллекторы не выбраны.",
-            title=u"Создать 3D вид коллектора",
-            exitscript=True
-        )
+        fail(u"Коллекторы не выбраны.", u"Нечего обрабатывать")
 
     view_type_id = get_3d_view_type_id()
 
     if view_type_id == ElementId.InvalidElementId:
-        forms.alert(
-            u"Не найден тип 3D вида.",
-            title=u"Создать 3D вид коллектора",
-            exitscript=True
+        fail(
+            u"Не найден тип 3D вида.\n\n"
+            u"Создать вид невозможно: в проекте нет ни одного типа 3D-вида.",
+            u"Нет типа 3D-вида"
         )
 
     offset_xy = OFFSET_XY_MM * MM_TO_FT
@@ -256,10 +265,14 @@ try:
     if skipped:
         msg += u"\n\nПропуски / ошибки:\n" + u"\n".join(skipped[:10])
 
-    forms.alert(
+    pp_wpf.show_report(
         msg,
-        title=u"Создать 3D вид коллектора"
+        title=u"Готово",
+        subtitle=TOOL_TITLE
     )
+
+except Stop:
+    pass
 
 except OperationCanceledException:
     pass
@@ -271,7 +284,9 @@ except Exception as ex:
     except:
         pass
 
-    forms.alert(
-        u"Ошибка:\n\n{}".format(unicode(ex)),
-        title=u"Создать 3D вид коллектора"
+    pp_wpf.show_report(
+        unicode(ex),
+        title=u"Ошибка",
+        subtitle=TOOL_TITLE,
+        is_error=True
     )
