@@ -79,17 +79,17 @@ SHOW_REPORT = _settings.get("heatloss_show_report", True)
 MARGIN_FT    = 0.15 / 0.3048
 FLOOR_OFFSET = 0.10 / 0.3048
 
-PARAM_TEMP   = "ADSK_Температура в помещении"
-PARAM_NUM_NM = "PP_Номер имя помещения"
-PARAM_AREA   = "ADSK_Размер_Площадь"
-PARAM_ORIENT = "PP_Ориентация по стороне света"
-PARAM_COEFF  = "PP_Добавка на сторону света"
+PARAM_TEMP   = u"ADSK_Температура в помещении"
+PARAM_NUM_NM = u"PP_Номер имя помещения"
+PARAM_AREA   = u"ADSK_Размер_Площадь"
+PARAM_ORIENT = u"PP_Ориентация по стороне света"
+PARAM_COEFF  = u"PP_Добавка на сторону света"
 
 COPY_FROM_WALL = [PARAM_TEMP, PARAM_NUM_NM]
 
 ORIENT_COEFF = {
-    "С":  1.1,  "СВ": 1.1,  "В":  1.1,  "ЮВ": 1.05,
-    "Ю":  1.0,  "ЮЗ": 1.0,  "З":  1.05, "СЗ": 1.1
+    u"С":  1.1,  u"СВ": 1.1,  u"В":  1.1,  u"ЮВ": 1.05,
+    u"Ю":  1.0,  u"ЮЗ": 1.0,  u"З":  1.05, u"СЗ": 1.1
 }
 
 WALL_CAT   = int(BuiltInCategory.OST_Walls)
@@ -212,10 +212,10 @@ def copy_one_param(src_el, dst_el, param_name):
     src = src_el.LookupParameter(param_name)
     dst = dst_el.LookupParameter(param_name)
 
-    if src is None:      return "WARN:нет_источника"
-    if dst is None:      return "WARN:нет_приёмника"
+    if src is None:      return u"WARN:нет_источника"
+    if dst is None:      return u"WARN:нет_приёмника"
     if dst.IsReadOnly:   return "WARN:read-only"
-    if not src.HasValue: return "WARN:пусто"
+    if not src.HasValue: return u"WARN:пусто"
 
     try:
         if src.StorageType == StorageType.Double:
@@ -229,7 +229,7 @@ def copy_one_param(src_el, dst_el, param_name):
     except Exception as ex:
         return "ERR:{}".format(unicode(ex))
 
-    return "WARN:тип"
+    return u"WARN:тип"
 
 
 def apply_orient_and_coeff(element, compass):
@@ -279,7 +279,7 @@ def apply_orient_and_coeff(element, compass):
 # ─── ФАЗА И ПОИСК ПРОСТРАНСТВА ПО ТОЧКЕ ─────────────────────
 
 def get_element_phase(element):
-    """Фаза создания элемента; если нет — последняя фаза проекта."""
+    u"""Фаза создания элемента; если нет — последняя фаза проекта."""
     try:
         p = element.get_Parameter(BuiltInParameter.PHASE_CREATED)
         if p and p.HasValue:
@@ -296,7 +296,7 @@ def get_element_phase(element):
 
 
 def get_space_at_point(pt, phase):
-    """GetSpaceAtPoint с фазой; без фазы — как раньше."""
+    u"""GetSpaceAtPoint с фазой; без фазы — как раньше."""
     try:
         if phase is not None:
             sp = doc.GetSpaceAtPoint(pt, phase)
@@ -337,7 +337,7 @@ def vector_to_compass(vec):
 
 
 def get_wall_probe_offsets(wall):
-    """
+    u"""
     Расстояния зондов от линии стены (v8).
     Линия привязки может быть осью ИЛИ гранью — зондируем на двух
     расстояниях, чтобы хотя бы одно вышло за грань в помещение:
@@ -387,7 +387,7 @@ def get_wall_probe_points(wall):
 
 
 def vote_for_space(pts, phase=None):
-    """
+    u"""
     Общая функция голосования: принимает список (XYZ, sign),
     возвращает (best_space, votes, total, pos_votes, neg_votes).
     """
@@ -420,7 +420,7 @@ def vote_for_space(pts, phase=None):
 _ALL_SPACES_CACHE = [None]
 
 def get_all_spaces():
-    """Все размещённые пространства документа (кэш на один запуск)."""
+    u"""Все размещённые пространства документа (кэш на один запуск)."""
     if _ALL_SPACES_CACHE[0] is None:
         spaces = []
         for sp in FilteredElementCollector(doc) \
@@ -437,7 +437,7 @@ def get_all_spaces():
 
 
 def spaces_in_z_range(z_min, z_max, z_tol=1.5):
-    """Пространства, пересекающиеся с диапазоном [z_min, z_max] по Z."""
+    u"""Пространства, пересекающиеся с диапазоном [z_min, z_max] по Z."""
     result = []
     for sp in get_all_spaces():
         try:
@@ -459,7 +459,7 @@ def spaces_in_z_range(z_min, z_max, z_tol=1.5):
 
 
 def vote_for_space_ipis(pts, z_min, z_max):
-    """
+    u"""
     Второй метод поиска (v7): голосование зондов через Space.IsPointInSpace()
     по пространствам, пересекающимся с элементом по Z.
     Работает там, где doc.GetSpaceAtPoint() молчит.
@@ -497,7 +497,7 @@ def vote_for_space_ipis(pts, z_min, z_max):
 
 
 def nearest_space_fallback(ref_point, z_min=None, z_max=None):
-    """
+    u"""
     Ближайшее пространство по 2D-расстоянию от ref_point,
     НО только среди пространств, пересекающихся с элементом по Z.
 
@@ -533,7 +533,7 @@ def nearest_space_fallback(ref_point, z_min=None, z_max=None):
 # ─── ПОИСК ПРОСТРАНСТВА: ОБЫЧНАЯ СТЕНА ──────────────────────
 
 def find_space_and_compass(wall):
-    """
+    u"""
     Для обычных (несущих) стен.
     Возвращает (space, votes, total, compass, method),
     method: "pts" | "ipis" | "fallback" | None.
@@ -584,7 +584,7 @@ def find_space_and_compass(wall):
 # ─── ПОИСК ПРОСТРАНСТВА: ВИТРАЖ ─────────────────────────────
 
 def find_space_and_compass_for_curtain(curtain_wall, host_wall):
-    """
+    u"""
     Специальная функция для витражей. Решает две проблемы:
 
     1. ПРАВИЛЬНЫЙ ЭТАЖ (регрессия v4):
@@ -675,7 +675,7 @@ def find_space_and_compass_for_curtain(curtain_wall, host_wall):
 # ─── ПОИСК ХОСТ-СТЕНЫ ДЛЯ ВИТРАЖА ───────────────────────────
 
 def find_host_wall_for_curtain(curtain_wall, basic_walls):
-    """
+    u"""
     Ищет несущую стену, в которую вставлен витраж, по трём критериям в 2D:
       1. Параллельность осей (dot >= 0.98)
       2. Перп. расстояние <= ширина_стены/2 + 10 мм
@@ -751,7 +751,7 @@ def method_label(method, votes, total):
 
 
 def process_wall(wall):
-    """Возвращает (ok, msg, compass)."""
+    u"""Возвращает (ok, msg, compass)."""
     space, votes, total, compass, mtd = find_space_and_compass(wall)
 
     if space is None:
@@ -807,7 +807,7 @@ def process_wall(wall):
 # ─── ОБРАБОТКА: ВИТРАЖ ───────────────────────────────────────
 
 def process_curtain_wall(curtain_wall, host, precache_compass):
-    """
+    u"""
     Обрабатывает витраж.
 
     host            — хост-стена (или None)

@@ -181,7 +181,7 @@ def is_pipe_fitting(el):
 # ---------------------------------------------------------------------
 
 def reference_target_z(ref_pipe):
-    """Средняя Z коннекторов эталонной трубы (для горизонтальной — её ось)."""
+    u"""Средняя Z коннекторов эталонной трубы (для горизонтальной — её ось)."""
     zs = []
     for c in get_connectors(ref_pipe):
         try:
@@ -213,7 +213,7 @@ def pipe_axis_z_range(pipe):
 # ---------------------------------------------------------------------
 
 def collect_network(pipe_ids):
-    """Возвращает (fitting_ids, external_ids).
+    u"""Возвращает (fitting_ids, external_ids).
     fitting_ids — фитинги, все соседи которых внутри сети (можно двигать);
     external_ids — фитинги, у которых есть связь наружу (двигать нельзя)."""
     pipe_set = set(pid.IntegerValue for pid in pipe_ids)
@@ -272,7 +272,7 @@ def collect_network(pipe_ids):
 # ---------------------------------------------------------------------
 
 def record_internal_pairs(all_ids):
-    """Список кортежей (aid, aConnId, bid, bConnId) — соединённые пары
+    u"""Список кортежей (aid, aConnId, bid, bConnId) — соединённые пары
     коннекторов внутри сети (без дублей)."""
     id_set = set(x.IntegerValue for x in all_ids)
     pairs = []

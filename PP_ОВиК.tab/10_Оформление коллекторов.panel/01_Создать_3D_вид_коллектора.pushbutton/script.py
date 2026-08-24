@@ -23,7 +23,7 @@ uidoc = __revit__.ActiveUIDocument
 # НАСТРОЙКИ
 # ─────────────────────────────────────────────
 
-PARAM_MARK = "ADSK_Марка"
+PARAM_MARK = u"ADSK_Марка"
 
 # Запас вокруг коллектора, мм
 OFFSET_XY_MM = 1200

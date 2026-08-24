@@ -133,7 +133,7 @@ def level_name(el):
 
 
 def read_param(el, name):
-    """Возвращает {storage, value, text} или None, если параметра нет."""
+    u"""Возвращает {storage, value, text} или None, если параметра нет."""
     try:
         p = el.LookupParameter(name)
     except:
@@ -292,7 +292,7 @@ def collect_walls():
 
 
 def collect_openings():
-    """Окна и двери."""
+    u"""Окна и двери."""
     result = []
     for bic, label in [(BuiltInCategory.OST_Windows, u"Окно"),
                        (BuiltInCategory.OST_Doors, u"Дверь")]:

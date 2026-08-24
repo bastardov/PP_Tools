@@ -44,12 +44,12 @@ uidoc = __revit__.ActiveUIDocument
 MARGIN_FT    = 0.15 / 0.3048
 FLOOR_OFFSET = 0.10 / 0.3048
 
-PARAM_ORIENT = "PP_Ориентация по стороне света"
-PARAM_COEFF  = "PP_Добавка на сторону света"
+PARAM_ORIENT = u"PP_Ориентация по стороне света"
+PARAM_COEFF  = u"PP_Добавка на сторону света"
 
 ORIENT_COEFF = {
-    "С":  1.1,  "СВ": 1.1,  "В":  1.1,  "ЮВ": 1.05,
-    "Ю":  1.0,  "ЮЗ": 1.0,  "З":  1.05, "СЗ": 1.1
+    u"С":  1.1,  u"СВ": 1.1,  u"В":  1.1,  u"ЮВ": 1.05,
+    u"Ю":  1.0,  u"ЮЗ": 1.0,  u"З":  1.05, u"СЗ": 1.1
 }
 
 WALL_CAT   = int(BuiltInCategory.OST_Walls)
@@ -101,7 +101,7 @@ def is_curtain_wall(wall):
 
 
 def apply_orient_and_coeff(element, compass):
-    """Пишет ТОЛЬКО сторону света и коэффициент. Возвращает список сообщений."""
+    u"""Пишет ТОЛЬКО сторону света и коэффициент. Возвращает список сообщений."""
     msgs = []
 
     # Запись сокращённой стороны света ("С", "СВ", "З", "Ю" …) в текстовый
@@ -143,7 +143,7 @@ def apply_orient_and_coeff(element, compass):
 # ─── ФАЗА И ПОИСК ПРОСТРАНСТВА ПО ТОЧКЕ ─────────────────────
 
 def get_element_phase(element):
-    """Фаза создания элемента; если нет — последняя фаза проекта."""
+    u"""Фаза создания элемента; если нет — последняя фаза проекта."""
     try:
         p = element.get_Parameter(BuiltInParameter.PHASE_CREATED)
         if p and p.HasValue:
@@ -160,7 +160,7 @@ def get_element_phase(element):
 
 
 def get_space_at_point(pt, phase):
-    """GetSpaceAtPoint с фазой; без фазы — как раньше."""
+    u"""GetSpaceAtPoint с фазой; без фазы — как раньше."""
     try:
         if phase is not None:
             sp = doc.GetSpaceAtPoint(pt, phase)
@@ -194,7 +194,7 @@ def vector_to_compass(vec):
 
 
 def get_wall_probe_offsets(wall):
-    """
+    u"""
     Расстояния зондов от линии стены (v8).
     Линия привязки может быть осью ИЛИ гранью — зондируем на двух
     расстояниях, чтобы хотя бы одно вышло за грань в помещение:
@@ -244,7 +244,7 @@ def get_wall_probe_points(wall):
 
 
 def vote_for_space(pts, phase=None):
-    """
+    u"""
     Общая функция голосования: принимает список (XYZ, sign),
     возвращает (best_space, votes, total, pos_votes, neg_votes).
     """
@@ -277,7 +277,7 @@ def vote_for_space(pts, phase=None):
 _ALL_SPACES_CACHE = [None]
 
 def get_all_spaces():
-    """Все размещённые пространства документа (кэш на один запуск)."""
+    u"""Все размещённые пространства документа (кэш на один запуск)."""
     if _ALL_SPACES_CACHE[0] is None:
         spaces = []
         for sp in FilteredElementCollector(doc) \
@@ -294,7 +294,7 @@ def get_all_spaces():
 
 
 def spaces_in_z_range(z_min, z_max, z_tol=1.5):
-    """Пространства, пересекающиеся с диапазоном [z_min, z_max] по Z."""
+    u"""Пространства, пересекающиеся с диапазоном [z_min, z_max] по Z."""
     result = []
     for sp in get_all_spaces():
         try:
@@ -316,7 +316,7 @@ def spaces_in_z_range(z_min, z_max, z_tol=1.5):
 
 
 def vote_for_space_ipis(pts, z_min, z_max):
-    """
+    u"""
     Второй метод поиска (v7): голосование зондов через Space.IsPointInSpace()
     по пространствам, пересекающимся с элементом по Z.
     Работает там, где doc.GetSpaceAtPoint() молчит.
@@ -354,7 +354,7 @@ def vote_for_space_ipis(pts, z_min, z_max):
 
 
 def nearest_space_fallback(ref_point, z_min=None, z_max=None):
-    """
+    u"""
     Ближайшее пространство по 2D-расстоянию от ref_point,
     НО только среди пространств, пересекающихся с элементом по Z.
     Если ни одно пространство не пересекается по Z — возвращает None.
@@ -386,7 +386,7 @@ def nearest_space_fallback(ref_point, z_min=None, z_max=None):
 # ─── ОПРЕДЕЛЕНИЕ СТОРОНЫ СВЕТА: ОБЫЧНАЯ СТЕНА ───────────────
 
 def find_compass(wall):
-    """
+    u"""
     Для обычных (несущих) стен.
     Возвращает (compass, method), method: "pts" | "ipis" | "fallback" | None.
     """
@@ -436,7 +436,7 @@ def find_compass(wall):
 # ─── ОПРЕДЕЛЕНИЕ СТОРОНЫ СВЕТА: ВИТРАЖ ──────────────────────
 
 def find_compass_for_curtain(curtain_wall, host_wall):
-    """
+    u"""
     Специальная функция для витражей:
       - Z-диапазон зондов из bounding box ВИТРАЖА (правильный этаж).
       - нормаль/отступ из ХОСТ-СТЕНЫ (надёжнее тонкого витража).
@@ -513,7 +513,7 @@ def find_compass_for_curtain(curtain_wall, host_wall):
 # ─── ПОИСК ХОСТ-СТЕНЫ ДЛЯ ВИТРАЖА ───────────────────────────
 
 def find_host_wall_for_curtain(curtain_wall, basic_walls):
-    """
+    u"""
     Ищет несущую стену, в которую вставлен витраж, по трём критериям в 2D:
       1. Параллельность осей (dot >= 0.98)
       2. Перп. расстояние <= ширина_стены/2 + 10 мм
@@ -591,7 +591,7 @@ def method_label(method):
 
 
 def process_wall(wall):
-    """Возвращает (ok, msg, compass)."""
+    u"""Возвращает (ok, msg, compass)."""
     compass, mtd = find_compass(wall)
 
     if compass is None:
@@ -606,7 +606,7 @@ def process_wall(wall):
 
 
 def process_curtain_wall(curtain_wall, host, precache_compass):
-    """Обрабатывает витраж. Возвращает (ok, msg, compass)."""
+    u"""Обрабатывает витраж. Возвращает (ok, msg, compass)."""
     compass, mtd = find_compass_for_curtain(curtain_wall, host)
 
     # Если compass не определён зондами — берём из pre-кэша хост-стены
@@ -635,7 +635,7 @@ def process_curtain_wall(curtain_wall, host, precache_compass):
 
 
 def process_window_door(element, wall_compass_cache):
-    """Окно/дверь берёт сторону света от своей хост-стены."""
+    u"""Окно/дверь берёт сторону света от своей хост-стены."""
     try:
         host = element.Host
     except:
@@ -661,7 +661,7 @@ def process_window_door(element, wall_compass_cache):
 
 
 def process_floor(floor):
-    """Перекрытие горизонтально — стороны света нет: пусто + K=1.0."""
+    u"""Перекрытие горизонтально — стороны света нет: пусто + K=1.0."""
     msgs = []
 
     dst_or = floor.LookupParameter(PARAM_ORIENT)

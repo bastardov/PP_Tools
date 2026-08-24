@@ -131,9 +131,10 @@ def check_bundles_and_assets(paths, out):
         else:
             try:
                 width, height, has_alpha = png_info(icon_path)
-                if (width, height) != (32, 32):
-                    out.warning(u"Иконка не 32×32: {} ({}×{})".format(
-                        rel(icon_path), width, height))
+                if width != height or not (32 <= width <= 128):
+                    out.warning(
+                        u"Иконка должна быть квадратной, от 32 до 128 пикселей: "
+                        u"{} ({}×{})".format(rel(icon_path), width, height))
                 if not has_alpha:
                     out.warning(u"У иконки не найден прозрачный канал: {}".format(
                         rel(icon_path)))
