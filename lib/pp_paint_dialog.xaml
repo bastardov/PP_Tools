@@ -1,0 +1,180 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Окраска"
+        Width="460"
+        MinWidth="420"
+        MinHeight="320"
+        MaxHeight="820"
+        SizeToContent="Height"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>   <!-- заголовок -->
+      <RowDefinition Height="Auto"/>   <!-- описание -->
+      <RowDefinition Height="Auto"/>   <!-- 2 категории -->
+      <RowDefinition Height="Auto"/>   <!-- 3 числовое поле -->
+      <RowDefinition Height="Auto"/>   <!-- 4 выбор значения -->
+      <RowDefinition Height="Auto"/>   <!-- 5 сброс и доп. галочки -->
+      <RowDefinition Height="*"/>      <!-- 6 растяжка -->
+      <RowDefinition Height="Auto"/>   <!-- 7 разделитель -->
+      <RowDefinition Height="Auto"/>   <!-- 8 подвал -->
+    </Grid.RowDefinitions>
+
+    <!-- ===== Заголовок ===== -->
+    <TextBlock Grid.Row="0" Style="{StaticResource H1}" Text="{Binding Title}"/>
+
+    <TextBlock Grid.Row="1" Style="{StaticResource Subtitle}" Margin="0,4,0,0"
+               Text="{Binding Subtitle}"
+               Visibility="{Binding HasSubtitle, Converter={StaticResource BoolVis}}"/>
+
+    <!-- ===== Категории. Флажки добавляются кодом по конфигурации ===== -->
+    <Grid Grid.Row="2" Margin="0,14,0,0"
+          Visibility="{Binding HasCategories, Converter={StaticResource BoolVis}}">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <Grid Grid.Row="0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Grid.Column="0" Style="{StaticResource FieldLabel}"
+                   Text="{Binding CategoriesLabel}"/>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,-6,0,0"
+                    Visibility="{Binding HasCategoryActions, Converter={StaticResource BoolVis}}">
+          <Button x:Name="BtnCheckAll" Content="Отметить все" Style="{StaticResource Button.Flat}"
+                  MinWidth="0" Padding="10,4,10,4" Margin="0,0,6,0"/>
+          <Button x:Name="BtnUncheckAll" Content="Снять все" Style="{StaticResource Button.Flat}"
+                  MinWidth="0" Padding="10,4,10,4"/>
+        </StackPanel>
+      </Grid>
+
+      <TextBlock Grid.Row="1" Style="{StaticResource Caption}" Margin="0,-2,0,6"
+                 Text="{Binding CategoriesHint}"
+                 Visibility="{Binding HasCategoriesHint, Converter={StaticResource BoolVis}}"/>
+
+      <Border Grid.Row="2" Style="{StaticResource Card}">
+        <ScrollViewer x:Name="ScrollCategories" VerticalScrollBarVisibility="Auto"
+                      Padding="14,12,10,6">
+          <StackPanel x:Name="PanelCategories"/>
+        </ScrollViewer>
+      </Border>
+
+      <TextBlock Grid.Row="3" Style="{StaticResource Caption}" Margin="0,6,0,0"
+                 Text="{Binding CategoriesCounter}"
+                 Visibility="{Binding HasCategoryActions, Converter={StaticResource BoolVis}}"/>
+    </Grid>
+
+    <!-- ===== Необязательный выбор значения из списка с поиском ===== -->
+    <Grid Grid.Row="4" Margin="0,14,0,0"
+          Visibility="{Binding HasChoice, Converter={StaticResource BoolVis}}">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="{Binding ChoiceLabel}"/>
+      <TextBlock Grid.Row="1" Style="{StaticResource Caption}" Margin="0,-2,0,6"
+                 Text="{Binding ChoiceHint}"
+                 Visibility="{Binding HasChoiceHint, Converter={StaticResource BoolVis}}"/>
+
+      <Grid Grid.Row="2">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <TextBox x:Name="TxtChoice" Grid.Column="0" Style="{StaticResource TextBox.Field}"/>
+
+        <Button x:Name="BtnChoicePick" Grid.Column="1" Content="Выбрать…"
+                Style="{StaticResource Button.Flat}" MinWidth="0" Padding="14,7"
+                Margin="8,0,0,0"
+                ToolTip="Открыть отдельное окно со списком параметров и поиском"
+                Visibility="{Binding HasChoicePicker, Converter={StaticResource BoolVis}}"/>
+      </Grid>
+
+      <Border Grid.Row="3" Style="{StaticResource Card}" Height="150" Margin="0,6,0,0">
+        <Grid>
+          <ListBox x:Name="LstChoice" ItemsSource="{Binding ChoiceItems}"
+                   BorderThickness="0" Background="Transparent" Padding="4"
+                   ItemContainerStyle="{StaticResource PP.ListBoxItem}"
+                   HorizontalContentAlignment="Stretch"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+          <TextBlock Style="{StaticResource EmptyState}"
+                     Visibility="{Binding HasNoChoiceItems, Converter={StaticResource BoolVis}}"
+                     Text="Ничего не найдено. Измените запрос или впишите значение вручную."/>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ===== Необязательное числовое поле ===== -->
+    <StackPanel Grid.Row="3" Margin="0,14,0,0"
+                Visibility="{Binding HasNumber, Converter={StaticResource BoolVis}}">
+      <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding NumberLabel}"/>
+      <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,6"
+                 Text="{Binding NumberHint}"
+                 Visibility="{Binding HasNumberHint, Converter={StaticResource BoolVis}}"/>
+      <StackPanel Orientation="Horizontal">
+        <TextBox x:Name="TxtNumber" Style="{StaticResource TextBox.Field}" Width="110"/>
+        <TextBlock Style="{StaticResource Caption}" Margin="8,0,0,0" VerticalAlignment="Center"
+                   Text="{Binding NumberUnit}"/>
+      </StackPanel>
+    </StackPanel>
+
+    <!-- ===== Галочки инструмента и сброс ===== -->
+    <StackPanel Grid.Row="5" Margin="0,16,0,0"
+                Visibility="{Binding HasExtras, Converter={StaticResource BoolVis}}">
+      <Border Style="{StaticResource Rule}" Margin="0,0,0,14"/>
+      <!-- Дополнительные галочки инструмента добавляются кодом -->
+      <StackPanel x:Name="PanelSwitches" Margin="0,0,0,0"/>
+
+      <StackPanel Visibility="{Binding HasReset, Converter={StaticResource BoolVis}}">
+        <CheckBox x:Name="ChkReset" Style="{StaticResource PP.CheckBox}"
+                  Content="{Binding ResetLabel}"/>
+        <TextBlock Style="{StaticResource Caption}" Margin="23,4,0,0"
+                   Text="{Binding ResetHint}"
+                   Visibility="{Binding HasResetHint, Converter={StaticResource BoolVis}}"/>
+      </StackPanel>
+    </StackPanel>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="7" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="8" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtStatus" Grid.Column="0"
+                 Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}"
+                 Text="{Binding Status}"
+                 Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnCancel" Content="Отмена" Style="{StaticResource Button.Flat}" Margin="0,0,8,0"/>
+        <Button x:Name="BtnRun" Content="{Binding RunLabel}" Style="{StaticResource Button.Primary}"
+                IsEnabled="{Binding IsValid}"/>
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Window>

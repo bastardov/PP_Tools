@@ -1,0 +1,265 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Создать разрез из 3D вида"
+        Width="640"
+        MinWidth="580"
+        MinHeight="650"
+        SizeToContent="Height"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <TextBlock Grid.Row="0"
+               Style="{StaticResource H1}"
+               Text="Создать разрез из 3D вида"/>
+
+    <TextBlock Grid.Row="1"
+               Style="{StaticResource Subtitle}"
+               Margin="0,4,0,0"
+               Text="Выберите сторону — соответствующая грань подсветится на 3D-коробке."/>
+
+    <Border Grid.Row="2"
+            Style="{StaticResource Card}"
+            Margin="0,14,0,0"
+            Padding="18,14,18,14">
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Viewbox Grid.Row="0"
+                 MaxHeight="225"
+                 Stretch="Uniform"
+                 HorizontalAlignment="Stretch">
+        <Canvas Width="540" Height="245">
+          <!-- Неподвижные полупрозрачные плоскости 3D-коробки -->
+          <Path Data="M 135,35 L 355,35 L 405,75 L 185,75 Z"
+                Fill="{StaticResource AccentSoft}" Opacity="0.7"/>
+          <Path Data="M 135,35 L 185,75 L 185,195 L 135,155 Z"
+                Fill="{StaticResource Surface}"/>
+          <Path Data="M 355,35 L 405,75 L 405,195 L 355,155 Z"
+                Fill="{StaticResource AccentSoft}" Opacity="0.45"/>
+          <Path Data="M 185,75 L 405,75 L 405,195 L 185,195 Z"
+                Fill="{StaticResource Surface}" Opacity="0.32"/>
+
+          <!-- Заливка выбранной грани -->
+          <Path Data="M 185,75 L 405,75 L 405,195 L 185,195 Z"
+                Fill="{StaticResource AccentSoft}"
+                Visibility="{Binding IsFront, Converter={StaticResource BoolVis}}"/>
+          <Path Data="M 135,35 L 355,35 L 355,155 L 135,155 Z"
+                Fill="{StaticResource AccentSoft}"
+                Visibility="{Binding IsBack, Converter={StaticResource BoolVis}}"/>
+          <Path Data="M 135,35 L 185,75 L 185,195 L 135,155 Z"
+                Fill="{StaticResource AccentSoft}"
+                Visibility="{Binding IsLeft, Converter={StaticResource BoolVis}}"/>
+          <Path Data="M 355,35 L 405,75 L 405,195 L 355,155 Z"
+                Fill="{StaticResource AccentSoft}"
+                Visibility="{Binding IsRight, Converter={StaticResource BoolVis}}"/>
+
+          <!-- Каркас: задние рёбра пунктиром, передние сплошные -->
+          <Path Data="M 135,35 L 355,35 L 355,155 L 135,155 Z"
+                Stroke="{StaticResource Muted}"
+                StrokeThickness="1.5"
+                StrokeDashArray="5 3"/>
+          <Path Data="M 185,75 L 405,75 L 405,195 L 185,195 Z"
+                Stroke="{StaticResource Ink}"
+                StrokeThickness="1.8"/>
+          <Path Data="M 135,35 L 185,75 M 355,35 L 405,75 M 355,155 L 405,195 M 135,155 L 185,195"
+                Stroke="{StaticResource Line}"
+                StrokeThickness="1.5"/>
+
+          <!-- Акцентная обводка выбранной грани -->
+          <Path Data="M 185,75 L 405,75 L 405,195 L 185,195 Z"
+                Stroke="{StaticResource Accent}"
+                StrokeThickness="3.5"
+                StrokeLineJoin="Round"
+                Visibility="{Binding IsFront, Converter={StaticResource BoolVis}}"/>
+          <Path Data="M 135,35 L 355,35 L 355,155 L 135,155 Z"
+                Stroke="{StaticResource Accent}"
+                StrokeThickness="3.5"
+                StrokeLineJoin="Round"
+                Visibility="{Binding IsBack, Converter={StaticResource BoolVis}}"/>
+          <Path Data="M 135,35 L 185,75 L 185,195 L 135,155 Z"
+                Stroke="{StaticResource Accent}"
+                StrokeThickness="3.5"
+                StrokeLineJoin="Round"
+                Visibility="{Binding IsLeft, Converter={StaticResource BoolVis}}"/>
+          <Path Data="M 355,35 L 405,75 L 405,195 L 355,155 Z"
+                Stroke="{StaticResource Accent}"
+                StrokeThickness="3.5"
+                StrokeLineJoin="Round"
+                Visibility="{Binding IsRight, Converter={StaticResource BoolVis}}"/>
+
+          <TextBlock Canvas.Left="213" Canvas.Top="112"
+                     Style="{StaticResource FieldLabel}"
+                     Foreground="{StaticResource Ink}"
+                     Text="ГРАНИЦЫ АКТИВНОГО 3D ВИДА"/>
+
+          <TextBlock Canvas.Left="275" Canvas.Top="5"
+                     Style="{StaticResource FieldLabel}" Text="СЗАДИ"/>
+          <TextBlock Canvas.Left="215" Canvas.Top="224"
+                     Style="{StaticResource FieldLabel}" Text="СПЕРЕДИ"/>
+          <TextBlock Canvas.Left="24" Canvas.Top="113"
+                     Style="{StaticResource FieldLabel}" Text="СЛЕВА"/>
+          <TextBlock Canvas.Left="476" Canvas.Top="113"
+                     Style="{StaticResource FieldLabel}" Text="СПРАВА"/>
+
+          <!-- Стрелка показывает, откуда разрез смотрит внутрь коробки -->
+          <Path Data="M 295,228 L 295,198 M 295,198 L 286,209 M 295,198 L 304,209"
+                Stroke="{StaticResource Accent}"
+                StrokeThickness="3"
+                StrokeStartLineCap="Round"
+                StrokeEndLineCap="Round"
+                StrokeLineJoin="Round"
+                Visibility="{Binding IsFront, Converter={StaticResource BoolVis}}"/>
+          <Path Data="M 245,8 L 245,36 M 245,36 L 236,25 M 245,36 L 254,25"
+                Stroke="{StaticResource Accent}"
+                StrokeThickness="3"
+                StrokeStartLineCap="Round"
+                StrokeEndLineCap="Round"
+                StrokeLineJoin="Round"
+                Visibility="{Binding IsBack, Converter={StaticResource BoolVis}}"/>
+          <Path Data="M 76,120 L 137,120 M 137,120 L 125,112 M 137,120 L 125,128"
+                Stroke="{StaticResource Accent}"
+                StrokeThickness="3"
+                StrokeStartLineCap="Round"
+                StrokeEndLineCap="Round"
+                StrokeLineJoin="Round"
+                Visibility="{Binding IsLeft, Converter={StaticResource BoolVis}}"/>
+          <Path Data="M 466,130 L 404,130 M 404,130 L 416,122 M 404,130 L 416,138"
+                Stroke="{StaticResource Accent}"
+                StrokeThickness="3"
+                StrokeStartLineCap="Round"
+                StrokeEndLineCap="Round"
+                StrokeLineJoin="Round"
+                Visibility="{Binding IsRight, Converter={StaticResource BoolVis}}"/>
+        </Canvas>
+        </Viewbox>
+
+        <Border Grid.Row="1"
+                Margin="0,8,0,0"
+                Padding="12,9"
+                Background="{StaticResource AccentSoft}"
+                BorderBrush="{StaticResource Line}"
+                BorderThickness="1"
+                CornerRadius="4">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Rectangle Grid.Column="0"
+                       Width="16" Height="16"
+                       Margin="0,1,10,0"
+                       VerticalAlignment="Top"
+                       Fill="{StaticResource AccentSoft}"
+                       Stroke="{StaticResource Accent}"
+                       StrokeThickness="2"/>
+            <StackPanel Grid.Column="1">
+              <TextBlock Style="{StaticResource Body}"
+                         FontWeight="SemiBold"
+                         Foreground="{StaticResource Accent}"
+                         Text="{Binding SelectedSideTitle}"/>
+              <TextBlock Style="{StaticResource Caption}"
+                         Margin="0,2,0,0"
+                         Text="{Binding SelectedSideHint}"/>
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
+    </Border>
+
+    <StackPanel Grid.Row="3" Margin="0,14,0,0">
+      <TextBlock Style="{StaticResource FieldLabel}" Text="СТОРОНА РАЗРЕЗА"/>
+      <WrapPanel>
+        <RadioButton x:Name="ChipFront"
+                     Style="{StaticResource RadioButton.Chip}"
+                     GroupName="SectionSide"
+                     Content="Спереди"
+                     MinWidth="104"
+                     ToolTip="Создать разрез с передней стороны границ 3D вида"/>
+        <RadioButton x:Name="ChipBack"
+                     Style="{StaticResource RadioButton.Chip}"
+                     GroupName="SectionSide"
+                     Content="Сзади"
+                     MinWidth="104"
+                     ToolTip="Создать разрез с задней стороны границ 3D вида"/>
+        <RadioButton x:Name="ChipLeft"
+                     Style="{StaticResource RadioButton.Chip}"
+                     GroupName="SectionSide"
+                     Content="Слева"
+                     MinWidth="104"
+                     ToolTip="Создать разрез с левой стороны границ 3D вида"/>
+        <RadioButton x:Name="ChipRight"
+                     Style="{StaticResource RadioButton.Chip}"
+                     GroupName="SectionSide"
+                     Content="Справа"
+                     MinWidth="104"
+                     Margin="0"
+                     ToolTip="Создать разрез с правой стороны границ 3D вида"/>
+      </WrapPanel>
+    </StackPanel>
+
+    <StackPanel Grid.Row="4" Margin="0,14,0,0">
+      <TextBlock Style="{StaticResource FieldLabel}" Text="ШАБЛОН ВИДА РАЗРЕЗА"/>
+      <ComboBox x:Name="CmbTemplate"
+                Style="{StaticResource PP.ComboBox}"
+                ToolTip="Назначить шаблон созданному разрезу"/>
+      <TextBlock Style="{StaticResource Caption}"
+                 Margin="0,5,0,0"
+                 Text="Последний выбор будет подставлен при следующем запуске."/>
+    </StackPanel>
+
+    <Border Grid.Row="5"
+            Style="{StaticResource Rule}"
+            Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="6" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtStatus"
+                 Grid.Column="0"
+                 Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}"
+                 Text="{Binding Status}"
+                 Margin="0,0,12,0"
+                 TextWrapping="Wrap"
+                 TextTrimming="None"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnCancel"
+                Content="Отмена"
+                Style="{StaticResource Button.Flat}"
+                Margin="0,0,8,0"
+                ToolTip="Закрыть окно без создания разреза"/>
+        <Button x:Name="BtnRun"
+                Content="Создать разрез"
+                Style="{StaticResource Button.Primary}"
+                IsEnabled="{Binding IsValid}"
+                ToolTip="Создать разрез с выбранной стороны"/>
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

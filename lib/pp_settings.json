@@ -1,0 +1,538 @@
+{
+    "pipe_pair_distance_mm": 600.0, 
+    "spec_check_settings": {
+        "selected_keys": [
+            "name_presence", 
+            "quantity_presence", 
+            "duct_bzero", 
+            "duct_metal_thickness", 
+            "copper_pipe_sizes", 
+            "system_grouping", 
+            "sort_order", 
+            "mep_name_match", 
+            "size_in_name", 
+            "pipe_size_in_name", 
+            "proxy_controller", 
+            "forbidden_text", 
+            "param_rules", 
+            "nested_heat", 
+            "nested_vent"
+        ], 
+        "last_selected_key": "nested_vent", 
+        "config": {
+            "proxy_ctrl_code_param": "PP_\u041a\u043e\u0434 \u043f\u0440\u0430\u0432\u0438\u043b\u0430", 
+            "copper_standard_sizes_mm": "6, 8, 10, 12, 15, 18, 22, 28, 35, 42, 54, 64, 76, 89, 108", 
+            "pipe_size_name_param": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435", 
+            "pipe_gost1_size_param": "\u0414\u0438\u0430\u043c\u0435\u0442\u0440", 
+            "pipe_size_categories": "OST_PipeCurves", 
+            "mep_receiver_categories": "OST_PipeAccessory", 
+            "size_name_categories": "OST_DuctFitting", 
+            "sort_order_param": "PP_\u041f\u043e\u0440\u044f\u0434\u043e\u043a \u0441\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u043a\u0438", 
+            "copper_size_param": "\u0414\u0438\u0430\u043c\u0435\u0442\u0440", 
+            "param_rules_text": "# \u0444\u043e\u0440\u043c\u0430\u0442: \u0417\u043d\u0430\u0447\u0435\u043d\u0438\u0435 | \u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0438 \u0447\u0435\u0440\u0435\u0437 \u0437\u0430\u043f\u044f\u0442\u0443\u044e | \u0432\u0441\u0435|\u043b\u044e\u0431\u043e\u0435 | \u0443\u0441\u043b\u043e\u0432\u0438\u0435 ; \u0443\u0441\u043b\u043e\u0432\u0438\u0435 # \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u044b: ~ \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442, !~ \u043d\u0435 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442, = \u0440\u0430\u0432\u043d\u043e, != \u043d\u0435 \u0440\u0430\u0432\u043d\u043e, ^= \u043d\u0430\u0447\u0438\u043d\u0430\u0435\u0442\u0441\u044f \u0441 # \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u044e\u0442\u0441\u044f \u0442\u043e\u043b\u044c\u043a\u043e \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b, \u043f\u043e\u0434\u0445\u043e\u0434\u044f\u0449\u0438\u0435 \u043f\u043e\u0434 \u0443\u0441\u043b\u043e\u0432\u0438\u0435 \u043f\u0440\u0430\u0432\u0438\u043b\u0430 \n\u041e\u0442\u043e\u043f\u043b\u0435\u043d\u0438\u0435 | \u0422\u0440\u0443\u0431\u044b, \u0410\u0440\u043c\u0430\u0442\u0443\u0440\u0430 \u0442\u0440\u0443\u0431\u043e\u043f\u0440\u043e\u0432\u043e\u0434\u043e\u0432, \u0421\u043e\u0435\u0434\u0438\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0434\u0435\u0442\u0430\u043b\u0438 \u0442\u0440\u0443\u0431\u043e\u043f\u0440\u043e\u0432\u043e\u0434\u043e\u0432, \u041c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b \u0438\u0437\u043e\u043b\u044f\u0446\u0438\u0438 \u0442\u0440\u0443\u0431, \u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435 | \u043b\u044e\u0431\u043e\u0435 | \u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b ~ T11 ; \u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b ~ T21 \n\u0412\u0435\u043d\u0442\u0441\u043d\u0430\u0431\u0436\u0435\u043d\u0438\u0435 | \u0422\u0440\u0443\u0431\u044b, \u0410\u0440\u043c\u0430\u0442\u0443\u0440\u0430 \u0442\u0440\u0443\u0431\u043e\u043f\u0440\u043e\u0432\u043e\u0434\u043e\u0432, \u0421\u043e\u0435\u0434\u0438\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0434\u0435\u0442\u0430\u043b\u0438 \u0442\u0440\u0443\u0431\u043e\u043f\u0440\u043e\u0432\u043e\u0434\u043e\u0432, \u041c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b \u0438\u0437\u043e\u043b\u044f\u0446\u0438\u0438 \u0442\u0440\u0443\u0431, \u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435 | \u043b\u044e\u0431\u043e\u0435 | \u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b ~ T12 ; \u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b ~ T22 \n\u0422\u0435\u043f\u043b\u043e\u0441\u043d\u0430\u0431\u0436\u0435\u043d\u0438\u0435 | \u0422\u0440\u0443\u0431\u044b, \u0410\u0440\u043c\u0430\u0442\u0443\u0440\u0430 \u0442\u0440\u0443\u0431\u043e\u043f\u0440\u043e\u0432\u043e\u0434\u043e\u0432, \u0421\u043e\u0435\u0434\u0438\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0434\u0435\u0442\u0430\u043b\u0438 \u0442\u0440\u0443\u0431\u043e\u043f\u0440\u043e\u0432\u043e\u0434\u043e\u0432, \u041c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b \u0438\u0437\u043e\u043b\u044f\u0446\u0438\u0438 \u0442\u0440\u0443\u0431, \u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435 | \u0432\u0441\u0435 | \u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b ~ T1 ; \u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b !~ T11 ; \u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b !~ T12 \n\u0422\u0435\u043f\u043b\u043e\u0441\u043d\u0430\u0431\u0436\u0435\u043d\u0438\u0435 | \u0422\u0440\u0443\u0431\u044b, \u0410\u0440\u043c\u0430\u0442\u0443\u0440\u0430 \u0442\u0440\u0443\u0431\u043e\u043f\u0440\u043e\u0432\u043e\u0434\u043e\u0432, \u0421\u043e\u0435\u0434\u0438\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0434\u0435\u0442\u0430\u043b\u0438 \u0442\u0440\u0443\u0431\u043e\u043f\u0440\u043e\u0432\u043e\u0434\u043e\u0432, \u041c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b \u0438\u0437\u043e\u043b\u044f\u0446\u0438\u0438 \u0442\u0440\u0443\u0431, \u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435 | \u0432\u0441\u0435 | \u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b ~ T2 ; \u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b !~ T21 ; \u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b !~ T22 \n\u0414\u0440\u0435\u043d\u0430\u0436 | \u0410\u0440\u043c\u0430\u0442\u0443\u0440\u0430 \u0442\u0440\u0443\u0431\u043e\u043f\u0440\u043e\u0432\u043e\u0434\u043e\u0432, \u0421\u043e\u0435\u0434\u0438\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0434\u0435\u0442\u0430\u043b\u0438 \u0442\u0440\u0443\u0431\u043e\u043f\u0440\u043e\u0432\u043e\u0434\u043e\u0432, \u0422\u0440\u0443\u0431\u044b | \u0432\u0441\u0435 | \u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b ~ \u0414\u0440", 
+            "badtext_phrases": "\u041d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e\n\n\u041d\u0435\u0442 \u0432 \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0435\n\u041d\u0435 \u043d\u0430\u0439\u0434\u043d\u043e", 
+            "copper_keywords": "\u043c\u0435\u0434, copper", 
+            "size_name_name_param": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435", 
+            "proxy_ctrl_family": "PP_\u0421\u0435\u043c\u0435\u0439\u0441\u0442\u0432\u043e \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440 1", 
+            "nested_heat_param": "ADSK_\u0421\u0438\u0441\u0442\u0435\u043c\u0430_\u0421\u043e\u043a\u0440\u0430\u0449\u0435\u043d\u0438\u0435", 
+            "param_rules_target": "ADSK_\u0421\u0438\u0441\u0442\u0435\u043c\u0430_\u0421\u043e\u043a\u0440\u0430\u0449\u0435\u043d\u0438\u0435", 
+            "nested_heat_categories": "OST_MechanicalEquipment, OST_PipeCurves, OST_PipeAccessory, OST_PipeFitting", 
+            "nested_vent_param1": "\u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b", 
+            "pipe_gost2_keyword": "10704-91", 
+            "proxy_ctrl_value_param": "ADSK_\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e", 
+            "bzero_categories": "OST_DuctCurves, OST_DuctFitting", 
+            "grouping_param": "ADSK_\u0413\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435", 
+            "badtext_categories": "OST_MechanicalEquipment, OST_PipeCurves, OST_DuctCurves, OST_PipeAccessory, OST_DuctAccessory, OST_DuctTerminal, OST_PipeFitting, OST_FlexPipeCurves, OST_PipeInsulations, OST_DuctFitting, OST_FlexDuctCurves, OST_DuctInsulations, OST_GenericModel", 
+            "mep_source_categories": "OST_PipeCurves", 
+            "quantity_param": "ADSK_\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e", 
+            "nested_vent_categories": "OST_MechanicalEquipment, OST_PipeCurves, OST_DuctCurves, OST_PipeAccessory, OST_DuctAccessory, OST_DuctTerminal, OST_PipeFitting, OST_FlexPipeCurves, OST_PipeInsulations, OST_DuctFitting, OST_FlexDuctCurves, OST_DuctInsulations, OST_GenericModel", 
+            "copper_keyword_source": "\u0418\u043c\u044f \u0441\u0435\u043c\u0435\u0439\u0441\u0442\u0432\u0430", 
+            "name_presence_param": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435", 
+            "badtext_params": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435, ADSK_\u041c\u0430\u0440\u043a\u0430", 
+            "bzero_text": "b=0 \u043c\u043c; \u043a\u043b\u0430\u0441\u0441 \u0433\u0435\u0440\u043c\u0435\u0442\u0438\u0447\u043d\u043e\u0441\u0442\u0438 ,", 
+            "mep_receiver_param": "ADSK_\u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b \u0441\u043e\u043a\u0440\u0430\u0449\u0435\u043d\u043d\u043e\u0435", 
+            "proxy_ctrl_mapping": "PP_\u0418\u0442\u043e\u0433\u043e\u0432\u043e\u0435 \u043a\u043e\u043b-\u0432\u043e \u043c\u0435\u0442\u0430\u043b\u043b\u0430 \u0434\u043b\u044f \u0432\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u043e\u0432 = \u041c\u0415\u0422\u0410\u041b\u041b_\u041a\u0420\u0415\u041f\u041b\u0415\u041d\u0418\u0419_\u0412\u041e\u0417\u0414\u0423\u0425\u041e\u0412\u041e\u0414\u041e\u0412\n\nPP_\u0418\u0442\u043e\u0433\u043e\u0432\u043e\u0435 \u043a\u043e\u043b-\u0432\u043e \u043c\u0435\u0442\u0430\u043b\u043b\u0430 \u0434\u043b\u044f \u0442\u0440\u0443\u0431 = \u041c\u0415\u0422\u0410\u041b\u041b_\u041a\u0420\u0415\u041f\u041b\u0415\u041d\u0418\u0419_\u0422\u0420\u0423\u0411\n\nPP_\u0423\u0442\u0435\u043f\u043b\u0438\u0442\u0435\u043b\u044c \u0434\u043b\u044f \u043e\u043a\u043e\u0436\u0443\u0448\u0438\u0432\u0430\u043d\u0438\u044f = \u0423\u0442\u0435\u043f\u043b\u0438\u0442\u0435\u043b\u044c \u0434\u043b\u044f \u043e\u043a\u043e\u0436\u0443\u0448\u0438\u0432\u0430\u043d\u0438\u044f\n\nPP_\u041c\u0435\u0442\u0430\u043b\u043b \u0434\u043b\u044f \u043e\u043a\u043e\u0436\u0443\u0448\u0438\u0432\u0430\u043d\u0438\u044f = \u041c\u0435\u0442\u0430\u043b\u043b \u0434\u043b\u044f \u043e\u043a\u043e\u0436\u0443\u0448\u0438\u0432\u0430\u043d\u0438\u044f\n\nPP_\u041a\u043b\u0435\u0439 \u0434\u043b\u044f \u043e\u0433\u043d\u0435\u0437\u0430\u0449\u0438\u0442\u044b = \u041a\u043b\u0435\u0439 \u0434\u043b\u044f \u043e\u0433\u043d\u0435\u0437\u0430\u0449\u0438\u0442\u044b", 
+            "mep_filter": {
+                "apply_source": true, 
+                "match": "all", 
+                "conditions": [], 
+                "group_combine": "and", 
+                "apply_receiver": false, 
+                "enabled": false
+            }, 
+            "bzero_name_param": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435", 
+            "metal_thickness_param": "ADSK_\u0422\u043e\u043b\u0449\u0438\u043d\u0430 \u0441\u0442\u0435\u043d\u043a\u0438", 
+            "size_name_size_param": "\u0420\u0430\u0437\u043c\u0435\u0440", 
+            "pipe_gost1_keyword": "3262-75", 
+            "nested_vent_param2": "ADSK_\u0413\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435", 
+            "mep_source_param": "ADSK_\u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b \u0441\u043e\u043a\u0440\u0430\u0449\u0435\u043d\u043d\u043e\u0435", 
+            "proxy_ctrl_proxy_family": "PP_\u041f\u0440\u043e\u043a\u0441\u0438 \u043f\u043e\u0437\u0438\u0446\u0438\u044f 1", 
+            "sort_order_categories": "OST_DuctCurves, OST_DuctFitting", 
+            "pipe_gost2_size_param": "\u0412\u043d\u0435\u0448\u043d\u0438\u0439 \u0434\u0438\u0430\u043c\u0435\u0442\u0440"
+        }
+    }, 
+    "sheet_plan_section_map": [
+        "\u0412\u0435\u043d\u0442\u0438\u043b\u044f\u0446\u0438\u044f = \u0412\u0435\u043d\u0442\u0438\u043b\u044f\u0446\u0438\u044f", 
+        "\u041e\u0442\u043e\u043f\u043b\u0435\u043d\u0438\u0435 = \u041e\u0442\u043e\u043f\u043b\u0435\u043d\u0438\u0435", 
+        "\u041e\u0412 = \u041e\u0442\u043e\u043f\u043b\u0435\u043d\u0438\u0435 \u0438 \u0432\u0435\u043d\u0442\u0438\u043b\u044f\u0446\u0438\u044f", 
+        "\u041f\u0414 = \u041f\u0440\u043e\u0442\u0438\u0432\u043e\u0434\u044b\u043c\u043d\u0430\u044f \u0432\u0435\u043d\u0442\u0438\u043b\u044f\u0446\u0438\u044f", 
+        "\u0412\u041a = \u0412\u043e\u0434\u043e\u0441\u043d\u0430\u0431\u0436\u0435\u043d\u0438\u0435 \u0438 \u043a\u0430\u043d\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044f", 
+        "\u041a\u043e\u043d\u0434\u0438\u0446\u0438\u043e\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435= \u041a\u043e\u043d\u0434\u0438\u0446\u0438\u043e\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435"
+    ], 
+    "show_success_report": false, 
+    "tag_rules": [
+        {
+            "family": "SR", 
+            "cat": "OST_DuctTerminal", 
+            "tag_type": "15", 
+            "type": null, 
+            "tag_family": "ADSk_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u043a\u0440\u0430\u0442\u043a\u043e\u0435 / \u0420\u0430\u0441\u0445\u043e\u0434", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u0412-1", 
+            "cat": "OST_DuctTerminal", 
+            "tag_type": "20", 
+            "type": null, 
+            "tag_family": "ADSk_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u043a\u0440\u0430\u0442\u043a\u043e\u0435", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u0414", 
+            "cat": "OST_DuctTerminal", 
+            "tag_type": "18", 
+            "type": null, 
+            "tag_family": "ADSk_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u043a\u0440\u0430\u0442\u043a\u043e\u0435", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u0414-\u0414\u041c\u0423", 
+            "cat": "OST_DuctTerminal", 
+            "tag_type": "25", 
+            "type": null, 
+            "tag_family": "ADSk_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u043a\u0440\u0430\u0442\u043a\u043e\u0435", 
+            "leader": false
+        }, 
+        {
+            "family": "YAR 600*600", 
+            "cat": "OST_DuctTerminal", 
+            "tag_type": "18", 
+            "type": null, 
+            "tag_family": "ADSk_\u041c\u0430\u0440\u043a\u0430 / \u0420\u0430\u0441\u0445\u043e\u0434", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u0412-2", 
+            "cat": "OST_DuctTerminal", 
+            "tag_type": "20", 
+            "type": null, 
+            "tag_family": "ADSk_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u043a\u0440\u0430\u0442\u043a\u043e\u0435 / \u0420\u0430\u0441\u0445\u043e\u0434", 
+            "leader": false
+        }, 
+        {
+            "family": "PPK-2D", 
+            "cat": "OST_DuctAccessory", 
+            "tag_type": "40", 
+            "type": null, 
+            "tag_family": "ADSk_\u041c\u0430\u0440\u043a\u0430", 
+            "leader": false
+        }, 
+        {
+            "family": "PPK-2 \u043f\u0440\u044f\u043c\u043e\u0443\u0433\u043e\u043b\u044c\u043d\u044b\u0439", 
+            "cat": "OST_DuctAccessory", 
+            "tag_type": "55", 
+            "type": null, 
+            "tag_family": "ADSk_\u041c\u0430\u0440\u043a\u0430", 
+            "leader": false
+        }, 
+        {
+            "family": "PPK-2 \u043a\u0440\u0443\u0433\u043b\u044b\u0439", 
+            "cat": "OST_DuctAccessory", 
+            "tag_type": "25", 
+            "type": null, 
+            "tag_family": "ADSk_\u041c\u0430\u0440\u043a\u0430", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0410\u0417\u0414 192", 
+            "cat": "OST_DuctAccessory", 
+            "tag_type": "30", 
+            "type": null, 
+            "tag_family": "ADSk_\u041c\u0430\u0440\u043a\u0430", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0410\u0417\u0414 133", 
+            "cat": "OST_DuctAccessory", 
+            "tag_type": "25", 
+            "type": null, 
+            "tag_family": "ADSk_\u041c\u0430\u0440\u043a\u0430", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0410\u0440\u043c\u0430\u0442\u0443\u0440\u0430 15", 
+            "cat": "OST_DuctAccessory", 
+            "tag_type": "15", 
+            "type": null, 
+            "tag_family": "ADSk_\u041c\u0430\u0440\u043a\u0430", 
+            "leader": false
+        }, 
+        {
+            "family": "NKN", 
+            "cat": "OST_DuctAccessory", 
+            "tag_type": "15", 
+            "type": null, 
+            "tag_family": "ADSk_\u041c\u0430\u0440\u043a\u0430", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u0430\u0434\u0438\u0430\u0442\u043e\u0440\u044b", 
+            "cat": "OST_MechanicalEquipment", 
+            "tag_type": "20", 
+            "type": null, 
+            "tag_family": "ADSk_\u041c\u0430\u0440\u043a\u0430", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0412\u0435\u043d\u0442\u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438", 
+            "cat": "OST_MechanicalEquipment", 
+            "tag_type": "5", 
+            "type": null, 
+            "tag_family": "ADSk_\u041f\u043e\u0437\u0438\u0446\u0438\u044f", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u0420\u0435\u0448\u0435\u0442\u043a\u0430 \u0412\u044b\u0442\u044f\u0436\u043d\u0430\u044f \u0420\u0412-2 \u0440\u0430\u0437\u043c\u0435\u0440\u044b \u043f\u043e \u044d\u043a\u0437\u0435\u043c\u043f\u043b\u044f\u0440\u0430\u043c", 
+            "cat": "OST_DuctTerminal", 
+            "tag_type": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u043a\u0440\u0430\u0442\u043a\u043e\u0435 / \u0420\u0430\u0441\u0445\u043e\u0434_25", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u0412\u043e\u0437\u0434\u0443\u0445\u043e\u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0438\u0442\u0435\u043b\u0438", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u0420\u0435\u0448\u0435\u0442\u043a\u0430 \u041f\u0440\u0438\u0442\u043e\u0447\u043d\u0430\u044f \u0420\u0412-2 \u0440\u0430\u0437\u043c\u0435\u0440\u044b \u043f\u043e \u044d\u043a\u0437\u0435\u043c\u043f\u043b\u044f\u0440\u0430\u043c", 
+            "cat": "OST_DuctTerminal", 
+            "tag_type": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u043a\u0440\u0430\u0442\u043a\u043e\u0435_25", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u0412\u043e\u0437\u0434\u0443\u0445\u043e\u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0438\u0442\u0435\u043b\u0438", 
+            "leader": false
+        }, 
+        {
+            "family": "PP_\u0420\u0438\u0434\u0430\u043d_\u0423\u0437\u0435\u043b \u044d\u0442\u0430\u0436\u043d\u044b\u0439 TDU.5R \u043b\u0435\u0432\u044b\u0439_2-10 \u043e\u0442\u0432\u043e\u0434\u043e\u0432", 
+            "cat": "OST_PipeAccessory", 
+            "tag_type": "ADSK_\u041c\u0430\u0440\u043a\u0430_52", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u0410\u0440\u043c\u0430\u0442\u0443\u0440\u0430 \u0442\u0440\u0443\u0431\u043e\u043f\u0440\u043e\u0432\u043e\u0434\u043e\u0432", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u041a\u043b\u0430\u043f\u0430\u043d \u0434\u044b\u043c\u043e\u0443\u0434\u0430\u043b\u0435\u043d\u0438\u044f \u0442\u0438\u043f\u0430 \u0414\u041c\u0423 \u0441 \u0440\u0435\u0432\u0435\u0440\u0441\u0438\u0432\u043d\u044b\u043c \u043f\u0440\u0438\u0432\u043e\u0434\u043e\u043c", 
+            "cat": "OST_DuctAccessory", 
+            "tag_type": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435_60", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u0410\u0440\u043c\u0430\u0442\u0443\u0440\u0430 \u0432\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u043e\u0432", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u041a\u043b\u0430\u043f\u0430\u043d \u043f\u0440\u043e\u0442\u0438\u0432\u043e\u043f\u043e\u0436\u0430\u0440\u043d\u044b\u0439 \u041e\u0417-\u041c\u0421", 
+            "cat": "OST_DuctAccessory", 
+            "tag_type": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435_54", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u0410\u0440\u043c\u0430\u0442\u0443\u0440\u0430 \u0432\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u043e\u0432", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u041a\u043b\u0430\u043f\u0430\u043d \u043f\u0440\u043e\u0442\u0438\u0432\u043e\u043f\u043e\u0436\u0430\u0440\u043d\u044b\u0439 \u043a\u0440\u0443\u0433\u043b\u043e\u0433\u043e \u0441\u0435\u0447\u0435\u043d\u0438\u044f \u041e\u0417", 
+            "cat": "OST_DuctAccessory", 
+            "tag_type": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435_54", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u0410\u0440\u043c\u0430\u0442\u0443\u0440\u0430 \u0432\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u043e\u0432", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u041a\u043b\u0430\u043f\u0430\u043d \u043f\u0440\u043e\u0442\u0438\u0432\u043e\u043f\u043e\u0436\u0430\u0440\u043d\u044b\u0439 \u043f\u0440\u044f\u043c\u043e\u0443\u0433\u043e\u043b\u044c\u043d\u043e\u0433\u043e \u0441\u0435\u0447\u0435\u043d\u0438\u044f \u041e\u0417", 
+            "cat": "OST_DuctAccessory", 
+            "tag_type": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435_54", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u0410\u0440\u043c\u0430\u0442\u0443\u0440\u0430 \u0432\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u043e\u0432", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u0412\u0435\u043d\u0442\u0438\u043b\u044f\u0442\u043e\u0440 \u043a\u0430\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0441\u0435\u0440\u0438\u0438 VC", 
+            "cat": "OST_MechanicalEquipment", 
+            "tag_type": "ADSK_\u041f\u043e\u0437\u0438\u0446\u0438\u044f_7", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u0412\u0435\u043d\u0442\u0438\u043b\u044f\u0442\u043e\u0440 \u043a\u0430\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0441\u0435\u0440\u0438\u0438 \u0412\u0420\u0421-\u041a-LZ(LT)", 
+            "cat": "OST_MechanicalEquipment", 
+            "tag_type": "ADSK_\u041f\u043e\u0437\u0438\u0446\u0438\u044f_7", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u0412\u0435\u043d\u0442\u0438\u043b\u044f\u0442\u043e\u0440 \u0440\u0430\u0434\u0438\u0430\u043b\u044c\u043d\u044b\u0439 \u0412\u0420\u041d", 
+            "cat": "OST_MechanicalEquipment", 
+            "tag_type": "ADSK_\u041f\u043e\u0437\u0438\u0446\u0438\u044f_7", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u0412\u0435\u043d\u0442\u0438\u043b\u044f\u0442\u043e\u0440 \u043e\u0441\u0435\u0432\u043e\u0439 \u0420\u041e\u0421\u0410-300", 
+            "cat": "OST_MechanicalEquipment", 
+            "tag_type": "ADSK_\u041f\u043e\u0437\u0438\u0446\u0438\u044f_10", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435", 
+            "leader": false
+        }, 
+        {
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u0420\u0435\u0448\u0435\u0442\u043a\u0430 \u041f\u0440\u0438\u0442\u043e\u0447\u043d\u0430\u044f \u0414\u0435\u043a\u043e\u0440\u0430\u0442\u0438\u0432\u043d\u0430\u044f \u0422\u0438\u043f\u0430 \u0420\u0414 \u0440\u0430\u0437\u043c\u0435\u0440\u044b \u043f\u043e \u044d\u043a\u0437\u0435\u043c\u043f\u043b\u044f\u0440\u0430\u043c", 
+            "cat": "OST_DuctTerminal", 
+            "tag_type": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u043a\u0440\u0430\u0442\u043a\u043e\u0435_17", 
+            "type": null, 
+            "tag_family": "ADSK_M_\u0412\u043e\u0437\u0434\u0443\u0445\u043e\u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0438\u0442\u0435\u043b\u0438", 
+            "leader": false
+        }, 
+        {
+            "cat": "OST_DuctTerminal", 
+            "family": "\u0420\u041e\u0412\u0415\u041d_\u0420\u0435\u0448\u0435\u0442\u043a\u0430 \u0412\u044b\u0442\u044f\u0436\u043d\u0430\u044f \u0414\u0435\u043a\u043e\u0440\u0430\u0442\u0438\u0432\u043d\u0430\u044f \u0422\u0438\u043f\u0430 \u0420\u0414-\u0414\u041c\u0423-\u0421 \u0440\u0430\u0437\u043c\u0435\u0440\u044b \u043f\u043e \u044d\u043a\u0437\u0435\u043c\u043f\u043b\u044f\u0440\u0430\u043c", 
+            "tag_family": "ADSK_M_\u0412\u043e\u0437\u0434\u0443\u0445\u043e\u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0438\u0442\u0435\u043b\u0438", 
+            "tag_type": "ADSK_\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u043a\u0440\u0430\u0442\u043a\u043e\u0435_28", 
+            "type": null, 
+            "leader": false
+        }
+    ], 
+    "telemetry_dir": "C:\\Users\\My PC\\AppData\\Roaming\\pyRevit-Master\\extensions\\PP_Tools.extension\\telemetry", 
+    "sheet_name_prefixes": [
+        "\u0418\u0437\u043e\u043c\u0435\u0442\u0440\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u0441\u0445\u0435\u043c\u0430 \u0441\u0438\u0441\u0442\u0435\u043c", 
+        "\u0421\u0445\u0435\u043c\u0430 \u0441\u0438\u0441\u0442\u0435\u043c", 
+        "\u0421\u0438\u0441\u0442\u0435\u043c\u044b"
+    ], 
+    "tag_size_presets": [
+        {
+            "rules": [
+                {
+                    "max_len": 4, 
+                    "cat": "OST_DuctCurves", 
+                    "family": null, 
+                    "min_len": 4, 
+                    "tag_family": "ADSK_M_\u0412\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u044b", 
+                    "tag_type": "\u0420\u0430\u0437\u043c\u0435\u0440_8", 
+                    "type": null
+                }, 
+                {
+                    "max_len": 6, 
+                    "cat": "OST_DuctCurves", 
+                    "family": null, 
+                    "min_len": 6, 
+                    "tag_family": "ADSK_M_\u0412\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u044b", 
+                    "tag_type": "\u0412 \u043e\u0434\u043d\u0443 \u0418\u043c\u044f \u0421\u0438\u0441\u0442\u0435\u043c\u044b/\u0420\u0430\u0437\u043c\u0435\u0440 14", 
+                    "type": null
+                }, 
+                {
+                    "max_len": 8, 
+                    "cat": "OST_DuctCurves", 
+                    "family": null, 
+                    "min_len": 7, 
+                    "tag_family": "ADSK_M_\u0412\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u044b", 
+                    "tag_type": "\u0420\u0430\u0437\u043c\u0435\u0440_12", 
+                    "type": null
+                }, 
+                {
+                    "max_len": 9, 
+                    "cat": "OST_DuctCurves", 
+                    "family": null, 
+                    "min_len": 9, 
+                    "tag_family": "ADSK_M_\u0412\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u044b", 
+                    "tag_type": "\u0420\u0430\u0437\u043c\u0435\u0440_14", 
+                    "type": null
+                }, 
+                {
+                    "max_len": 14, 
+                    "cat": "OST_DuctCurves", 
+                    "family": null, 
+                    "min_len": 13, 
+                    "tag_family": "ADSK_M_\u0412\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u044b", 
+                    "tag_type": "\u0412 \u043e\u0434\u043d\u0443 \u0418\u043c\u044f \u0421\u0438\u0441\u0442\u0435\u043c\u044b/\u0420\u0430\u0437\u043c\u0435\u0440 19", 
+                    "type": null
+                }, 
+                {
+                    "max_len": 15, 
+                    "cat": "OST_DuctCurves", 
+                    "family": null, 
+                    "min_len": 15, 
+                    "tag_family": "ADSK_M_\u0412\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u044b", 
+                    "tag_type": "\u0412 \u043e\u0434\u043d\u0443 \u0418\u043c\u044f \u0421\u0438\u0441\u0442\u0435\u043c\u044b/\u0420\u0430\u0437\u043c\u0435\u0440 22", 
+                    "type": null
+                }, 
+                {
+                    "max_len": 18, 
+                    "cat": "OST_DuctCurves", 
+                    "family": null, 
+                    "min_len": 16, 
+                    "tag_family": "ADSK_M_\u0412\u043e\u0437\u0434\u0443\u0445\u043e\u0432\u043e\u0434\u044b", 
+                    "tag_type": "\u0412 \u043e\u0434\u043d\u0443 \u0418\u043c\u044f \u0421\u0438\u0441\u0442\u0435\u043c\u044b/\u0420\u0430\u0437\u043c\u0435\u0440 24", 
+                    "type": null
+                }
+            ], 
+            "name": "\u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0439"
+        }
+    ], 
+    "mep_param_transfer_settings": {
+        "chain_fill": true, 
+        "receiver_param": "ADSK_\u0421\u0438\u0441\u0442\u0435\u043c\u0430_\u0418\u043c\u044f", 
+        "receiver_keys": [
+            "pipe_curves", 
+            "pipe_fittings", 
+            "pipe_accessories"
+        ], 
+        "source_keys": [
+            "pipe_curves"
+        ], 
+        "source_param": "ADSK_\u0421\u0438\u0441\u0442\u0435\u043c\u0430_\u0418\u043c\u044f", 
+        "mode": "active_view", 
+        "filter": {
+            "apply_source": true, 
+            "match": "any", 
+            "conditions": [
+                {
+                    "value": "3262-75", 
+                    "group": 1, 
+                    "op": "contains", 
+                    "param": "\u0418\u043c\u044f \u0442\u0438\u043f\u0430"
+                }, 
+                {
+                    "value": "\u042211", 
+                    "group": 2, 
+                    "op": "starts_with", 
+                    "param": "\u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b"
+                }, 
+                {
+                    "value": "\u042221", 
+                    "group": 2, 
+                    "op": "starts_with", 
+                    "param": "\u0418\u043c\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u044b"
+                }
+            ], 
+            "group_combine": "and", 
+            "apply_receiver": false, 
+            "enabled": false
+        }
+    }, 
+    "heatloss_show_report": false, 
+    "mep_transfer_show_pyrevit_report": false, 
+    "proxy_position_types": [
+        "\u0420\u0443\u0447\u043d\u0430\u044f \u043f\u043e\u0437\u0438\u0446\u0438\u044f", 
+        "\u041a\u0440\u0430\u0441\u043a\u0430", 
+        "\u041c\u0435\u0442\u0430\u043b\u043b", 
+        "\u041a\u0440\u0435\u043f\u0435\u0436", 
+        "\u0420\u0430\u0441\u0445\u043e\u0434\u043d\u0438\u043a"
+    ], 
+    "show_warning_report": true, 
+    "heatloss_check_settings": {
+        "config": {
+            "numname_categories": "walls, curtain, windows, doors", 
+            "numname_report_host": "\u0434\u0430", 
+            "numname_report_missing": "\u0434\u0430", 
+            "numname_report_empty": "\u0434\u0430", 
+            "numname_soft_compare": "\u0434\u0430", 
+            "numname_param": "PP_\u041d\u043e\u043c\u0435\u0440 \u0438\u043c\u044f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f", 
+            "numname_report_unreliable": "\u0434\u0430"
+        }, 
+        "selected_keys": [
+            "numname_mismatch"
+        ], 
+        "scope": "selection", 
+        "last_selected_key": "numname_mismatch"
+    }, 
+    "corridor_length_sources": {
+        "host": false, 
+        "link": true
+    }, 
+    "proxy_rule_codes": [
+        "\u0420\u0423\u0427\u041d\u0410\u042f_\u041f\u041e\u0417\u0418\u0426\u0418\u042f", 
+        "\u041a\u0420\u0410\u0421\u041a\u0410_\u0413\u0424031", 
+        "\u041a\u0420\u0410\u0421\u041a\u0410_\u0411\u0422177", 
+        "\u041c\u0415\u0422\u0410\u041b\u041b_\u041a\u0420\u0415\u041f\u041b\u0415\u041d\u0418\u0419_\u0422\u0420\u0423\u0411", 
+        "\u041c\u0415\u0422\u0410\u041b\u041b_\u041a\u0420\u0415\u041f\u041b\u0415\u041d\u0418\u0419_\u0412\u041e\u0417\u0414\u0423\u0425\u041e\u0412\u041e\u0414\u041e\u0412", 
+        "\u041c\u0415\u0416\u0411\u041b\u041e\u0427\u041d\u042b\u0419 \u041a\u0410\u0411\u0415\u041b\u042c", 
+        "\u041c\u0435\u0442\u0430\u043b \u0434\u043b\u044f \u043a\u0440\u0435\u043f\u043b\u0435\u043d\u0438\u044f \u0434\u0440\u0435\u043d\u0430\u0436\u0430", 
+        "\u041a\u043b\u0435\u0439 \u0434\u043b\u044f \u043e\u0433\u043d\u0435\u0437\u0430\u0449\u0438\u0442\u044b", 
+        "\u041c\u0435\u0442\u0430\u043b\u043b \u0434\u043b\u044f \u043e\u043a\u043e\u0436\u0443\u0448\u0438\u0432\u0430\u043d\u0438\u044f", 
+        "\u0423\u0442\u0435\u043f\u043b\u0438\u0442\u0435\u043b\u044c \u0434\u043b\u044f \u043e\u043a\u043e\u0436\u0443\u0448\u0438\u0432\u0430\u043d\u0438\u044f"
+    ], 
+    "create_section_from_3d_template": {
+        "id": 74853, 
+        "name": "\u041e_\u0420_\u041e\u0442\u043e\u043f\u043b\u0435\u043d\u0438\u0435"
+    }, 
+    "detect_orientation": false, 
+    "sheet_plan_location_map": [
+        "\u041f\u043e\u0434\u0432\u0430\u043b = \u041f\u043b\u0430\u043d \u043f\u043e\u0434\u0432\u0430\u043b\u0430", 
+        "\u041a\u0440\u043e\u0432\u043b\u044f = \u041f\u043b\u0430\u043d \u043a\u0440\u043e\u0432\u043b\u0438", 
+        "\u0422\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u044d\u0442\u0430\u0436 = \u041f\u043b\u0430\u043d \u0442\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u044d\u0442\u0430\u0436\u0430", 
+        "\u0427\u0435\u0440\u0434\u0430\u043a = \u041f\u043b\u0430\u043d \u0447\u0435\u0440\u0434\u0430\u043a\u0430", 
+        "\u0422\u0435\u0445\u044d\u0442\u0430\u0436= \u041f\u043b\u0430\u043d \u0442\u0435\u0445\u044d\u0442\u0430\u0436\u0430", 
+        "\u0422\u0435\u0445\u043f\u043e\u0434\u043f\u043e\u043b\u044c\u0435= \u041f\u043b\u0430\u043d \u0442\u0435\u0445\u043f\u043e\u0434\u043f\u043e\u043b\u044c\u044f", 
+        "99= \u041f\u043b\u0430\u043d \u043a\u0440\u043e\u0432\u043b\u0438", 
+        "00= \u041f\u043b\u0430\u043d \u043f\u043e\u0434\u0432\u0430\u043b\u0430", 
+        "\u0422\u0435\u0445 \u044d\u0442\u0430\u0436= \u041f\u043b\u0430\u043d \u0422\u0435\u0445 \u044d\u0442\u0430\u0436\u0430", 
+        "\u041f\u0430\u0440\u043a\u0438\u043d\u0433= \u041f\u043b\u0430\u043d \u043f\u0430\u0440\u043a\u0438\u043d\u0433\u0430"
+    ], 
+    "tag_apply_categories": [
+        "OST_DuctAccessory", 
+        "OST_DuctCurves", 
+        "OST_DuctInsulations", 
+        "OST_DuctTerminal", 
+        "OST_GenericModel", 
+        "OST_MechanicalEquipment", 
+        "OST_PipeAccessory", 
+        "OST_PipeCurves", 
+        "OST_PipeInsulations"
+    ], 
+    "tag_size_active": "\u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0439", 
+    "model_check_settings": {
+        "last_selected_key": "grids_halftone", 
+        "config": {
+            "insul_include_systems": "", 
+            "near_tolerance_mm": "5", 
+            "insul_exclude_systems": "", 
+            "grids_tpl_include": "", 
+            "orphan_categories": "OST_PipeAccessory, OST_PipeFitting, OST_MechanicalEquipment, OST_DuctAccessory, OST_DuctTerminal, OST_DuctFitting", 
+            "pipe_flow_param": "", 
+            "degenerate_tolerance_mm": "1", 
+            "duplicate_tolerance_mm": "10", 
+            "pipe_flow_include_systems": "\u042211; \u042221", 
+            "grids_halftone_expected": "\u0434\u0430", 
+            "slope_tolerance": "0.01", 
+            "position_param": "ADSK_\u041f\u043e\u0437\u0438\u0446\u0438\u044f", 
+            "slope_param": "\u0423\u043a\u043b\u043e\u043d", 
+            "pipe_flow_exclude_systems": "", 
+            "short_segment_mm": "100", 
+            "slope_exclude_values": "0; 100; 57.7350; 173.2051", 
+            "insul_report_unclassified": "\u043d\u0435\u0442", 
+            "grids_tpl_exclude": "", 
+            "duplicate_categories": "OST_MechanicalEquipment, OST_PipeAccessory, OST_DuctAccessory, OST_PipeCurves, OST_DuctCurves", 
+            "short_segment_categories": "OST_PipeCurves, OST_DuctCurves", 
+            "insul_rules": "\u0413\u041e\u0421\u0422 10704; \u0413\u041e\u0421\u0422 3262 => \u0426\u0438\u043b\u0438\u043d\u0434\u0440\u044b \u043d\u0435\u043a\u0430\u0448\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0435\n\u041f\u043e\u043b\u0438\u044d\u0442\u0438\u043b\u0435\u043d \u0441\u0448\u0438\u0442\u044b\u0439; PE-Xa; PPR; PP-R => \u0422\u0440\u0443\u0431\u043a\u0438 \u0442\u0435\u043f\u043b\u043e\u0438\u0437\u043e\u043b\u044f\u0446\u0438\u043e\u043d\u043d\u044b\u0435", 
+            "orphan_include_partial": "\u043d\u0435\u0442", 
+            "duplicate_same_type": "\u0434\u0430"
+        }, 
+        "selected_keys": [
+            "pipe_flow_missing", 
+            "slope_unexpected", 
+            "orphan_no_system", 
+            "near_connectors", 
+            "short_segment", 
+            "degenerate_geometry", 
+            "duplicate_at_point", 
+            "pipe_insulation", 
+            "position_wrong_category", 
+            "position_duplicate", 
+            "grids_halftone"
+        ]
+    }
+}

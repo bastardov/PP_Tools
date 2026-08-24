@@ -1,0 +1,143 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Отчёт проверки"
+        Width="1020"
+        Height="660"
+        MinWidth="900"
+        MinHeight="580"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="True"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>   <!-- заголовок -->
+      <RowDefinition Height="*"/>      <!-- две колонки -->
+      <RowDefinition Height="Auto"/>   <!-- разделитель -->
+      <RowDefinition Height="Auto"/>   <!-- подвал -->
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0">
+      <TextBlock Style="{StaticResource H1}" Text="{Binding Headline}"/>
+      <TextBlock Style="{StaticResource Subtitle}" Margin="0,2,0,0" Text="{Binding Summary}"/>
+    </StackPanel>
+
+    <Grid Grid.Row="1" Margin="0,14,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="420"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <!-- ===== Левая колонка: проверки ===== -->
+      <Grid Grid.Column="0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Отступы шапки повторяют путь до содержимого строки, иначе колонки
+             разъедутся: 1 рамка карточки + 4 padding списка + 8 padding строки
+             = 13 слева, справа те же 13 плюс 12 на полосу прокрутки. -->
+        <Grid Grid.Row="0" Margin="13,0,25,6">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="70"/>
+            <ColumnDefinition Width="80"/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Grid.Column="0" Style="{StaticResource FieldLabel}" Text="ПРОВЕРКА"/>
+          <TextBlock Grid.Column="1" Style="{StaticResource FieldLabel}" Text="ПРОБЛЕМ"/>
+          <TextBlock Grid.Column="2" Style="{StaticResource FieldLabel}" Text="ПРОВЕРЕНО"/>
+        </Grid>
+
+        <Border Grid.Row="1" Style="{StaticResource Card}">
+          <!-- Полоса прокрутки зарезервирована всегда: иначе при её появлении
+               строки сузятся и разойдутся с шапкой. -->
+          <ListBox x:Name="LstChecks"
+                   BorderThickness="0" Background="Transparent" Padding="4"
+                   ItemContainerStyle="{StaticResource PP.ListBoxItem}"
+                   HorizontalContentAlignment="Stretch"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                   ScrollViewer.VerticalScrollBarVisibility="Visible"/>
+        </Border>
+
+        <!-- WrapPanel, а не StackPanel: в узкой колонке три кнопки не помещаются
+             в строку, и StackPanel обрезал бы последнюю вместо переноса.
+             Padding сжат до 14: с базовыми 22 они не влезают и в перенос. -->
+        <WrapPanel Grid.Row="2" Margin="0,8,0,0">
+          <Button x:Name="BtnPaint" Content="Подкрасить ошибки" Style="{StaticResource Button.Flat}"
+                  MinWidth="0" Padding="14,8,14,8" Margin="0,0,6,6"
+                  ToolTip="Красит проблемные элементы выбранной проверки на активном виде"/>
+          <Button x:Name="BtnResetPaint" Content="Сбросить окраску" Style="{StaticResource Button.Flat}"
+                  MinWidth="0" Padding="14,8,14,8" Margin="0,0,6,6"
+                  ToolTip="Снимает переопределения со всех элементов активного вида"/>
+          <Button x:Name="BtnSelectCheck" Content="Выделить все" Style="{StaticResource Button.Flat}"
+                  MinWidth="0" Padding="14,8,14,8" Margin="0,0,0,6"
+                  ToolTip="Выделяет в модели все проблемные элементы выбранной проверки"/>
+        </WrapPanel>
+      </Grid>
+
+      <!-- ===== Правая колонка: проблемные строки ===== -->
+      <Grid Grid.Column="1" Margin="14,0,0,0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}"
+                   Text="ПРОБЛЕМНЫЕ СТРОКИ — ДВОЙНОЙ КЛИК ВЫДЕЛЯЕТ В МОДЕЛИ"/>
+
+        <Border Grid.Row="1" Style="{StaticResource Card}">
+          <Grid>
+            <ListBox x:Name="LstIssues" ItemsSource="{Binding Issues}"
+                     BorderThickness="0" Background="Transparent" Padding="4"
+                     ItemContainerStyle="{StaticResource PP.ListBoxItem}"
+                     HorizontalContentAlignment="Stretch"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+            <TextBlock Style="{StaticResource EmptyState}"
+                       Visibility="{Binding HasNoIssues, Converter={StaticResource BoolVis}}"
+                       Text="Выберите проверку слева, чтобы увидеть её находки."/>
+          </Grid>
+        </Border>
+
+        <WrapPanel Grid.Row="2" Margin="0,8,0,0">
+          <Button x:Name="BtnSelectIssue" Content="Выделить строку" Style="{StaticResource Button.Flat}"
+                  MinWidth="0" Padding="14,8,14,8" Margin="0,0,0,6"
+                  ToolTip="То же, что двойной клик по строке"/>
+        </WrapPanel>
+      </Grid>
+    </Grid>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="2" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="3" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtStatus" Grid.Column="0"
+                 Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}"
+                 Text="{Binding Status}"
+                 Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnRestart" Content="Проверить заново" Style="{StaticResource Button.Flat}"
+                MinWidth="0" Margin="0,0,8,0"/>
+        <Button x:Name="BtnClose" Content="Закрыть" Style="{StaticResource Button.Primary}"/>
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Window>

@@ -1,0 +1,144 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Заполнить имя листа по видам"
+        Width="900"
+        Height="820"
+        MinWidth="820"
+        MinHeight="620"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>   <!-- заголовок -->
+      <RowDefinition Height="Auto"/>   <!-- начало имени -->
+      <RowDefinition Height="*"/>      <!-- две колонки -->
+      <RowDefinition Height="Auto"/>   <!-- предпросмотр -->
+      <RowDefinition Height="Auto"/>   <!-- разделитель -->
+      <RowDefinition Height="Auto"/>   <!-- подвал -->
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0">
+      <TextBlock Style="{StaticResource H1}" Text="Имя листа по видам"/>
+      <TextBlock Style="{StaticResource Subtitle}" Margin="0,2,0,0"
+                 Text="Имя собирается из выбранного начала и номеров систем, найденных в именах видов на листе."/>
+    </StackPanel>
+
+    <!-- ===== Начало имени листа ===== -->
+    <Grid Grid.Row="1" Margin="0,14,0,0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="НАЧАЛО ИМЕНИ ЛИСТА"/>
+
+      <TextBox x:Name="TxtPrefix" Grid.Row="1" Style="{StaticResource TextBox.Field}"
+               Tag="Впишите начало имени — например: Изометрическая схема систем"/>
+
+      <TextBlock Grid.Row="2" Style="{StaticResource Caption}" Margin="0,8,0,4"
+                 Text="Готовые варианты из настроек — щёлкните по строке, и она подставится в поле выше:"/>
+
+      <Border Grid.Row="3" Style="{StaticResource Card}" MaxHeight="110">
+        <Grid>
+          <ListBox x:Name="LstPrefixes"
+                   BorderThickness="0" Background="Transparent" Padding="4"
+                   ItemContainerStyle="{StaticResource PP.ListBoxItem}"
+                   HorizontalContentAlignment="Stretch"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+          <TextBlock Style="{StaticResource EmptyState}"
+                     Visibility="{Binding HasNoPrefixes, Converter={StaticResource BoolVis}}"
+                     Text="В настройках не задано ни одного варианта. Впишите начало имени вручную."/>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ===== Системы и виды ===== -->
+    <!-- MinHeight: списки не должны схлопываться до двух строк при сжатии -->
+    <Grid Grid.Row="2" Margin="0,14,0,0" MinHeight="260">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="320"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <Grid Grid.Column="0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="НАЙДЕННЫЕ СИСТЕМЫ"/>
+        <!-- Список построен кодом: общий контрол из lib/pp_check_list -->
+        <ContentControl x:Name="HostSystems" Grid.Row="1"/>
+      </Grid>
+
+      <Grid Grid.Column="1" Margin="14,0,0,0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}"
+                   Text="ИМЕНА ВИДОВ, В КОТОРЫХ НАЙДЕНЫ СИСТЕМЫ"/>
+
+        <Border Grid.Row="1" Style="{StaticResource Card}">
+          <Grid>
+            <ListBox x:Name="LstViews" ItemsSource="{Binding ViewNames}"
+                     BorderThickness="0" Background="Transparent" Padding="4"
+                     ItemContainerStyle="{StaticResource PP.ListBoxItem}"
+                     HorizontalContentAlignment="Stretch"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+            <TextBlock Style="{StaticResource EmptyState}"
+                       Visibility="{Binding HasNoViews, Converter={StaticResource BoolVis}}"
+                       Text="На листе не найдено видов с номерами систем."/>
+          </Grid>
+        </Border>
+      </Grid>
+    </Grid>
+
+    <!-- ===== Предпросмотр ===== -->
+    <StackPanel Grid.Row="3" Margin="0,14,0,0">
+      <TextBlock Style="{StaticResource FieldLabel}" Text="ИМЯ ЛИСТА БУДЕТ ТАКИМ"/>
+      <!-- Итог окна: выделен подложкой и полосой, читается первым -->
+      <Border Style="{StaticResource Card.Result}">
+        <TextBlock x:Name="TxtPreview" Style="{StaticResource Body.Result}"
+                   Foreground="{Binding PreviewBrush}"
+                   Text="{Binding Preview}"/>
+      </Border>
+    </StackPanel>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="4" Style="{StaticResource Rule}" Margin="0,14,0,0"/>
+
+    <Grid Grid.Row="5" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtStatus" Grid.Column="0"
+                 Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}"
+                 Text="{Binding Status}"
+                 Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnCancel" Content="Отмена" Style="{StaticResource Button.Flat}" Margin="0,0,8,0"/>
+        <Button x:Name="BtnRun" Content="Записать имя" Style="{StaticResource Button.Primary}"
+                IsEnabled="{Binding IsValid}"/>
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Window>

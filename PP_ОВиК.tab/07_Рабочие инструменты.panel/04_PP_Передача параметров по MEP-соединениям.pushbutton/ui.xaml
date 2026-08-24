@@ -1,0 +1,207 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Передача параметров по MEP-соединениям"
+        Width="1000"
+        Height="760"
+        MinWidth="900"
+        MinHeight="640"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>   <!-- заголовок -->
+      <RowDefinition Height="*"/>      <!-- две колонки -->
+      <RowDefinition Height="Auto"/>   <!-- разделитель -->
+      <RowDefinition Height="Auto"/>   <!-- подвал -->
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0">
+      <TextBlock Style="{StaticResource H1}" Text="Передача по MEP-соединениям"/>
+      <TextBlock Style="{StaticResource Subtitle}" Margin="0,2,0,0"
+                 Text="Значение параметра переносится с соединённых элементов-источников на приёмники. Настройки запоминаются до следующего запуска."/>
+    </StackPanel>
+
+    <Grid Grid.Row="1" Margin="0,14,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="420"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <!-- ===== Левая колонка: категории ===== -->
+      <Grid Grid.Column="0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="*"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,14">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Style="{StaticResource FieldLabel}" Text="КАТЕГОРИИ ИСТОЧНИКА"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,-6,0,0">
+              <Button x:Name="BtnSourceAll" Content="Все" Style="{StaticResource Button.Flat}"
+                      MinWidth="0" Padding="10,4,10,4" Margin="0,0,6,0"/>
+              <Button x:Name="BtnSourceNone" Content="Ничего" Style="{StaticResource Button.Flat}"
+                      MinWidth="0" Padding="10,4,10,4"/>
+            </StackPanel>
+          </Grid>
+
+          <Border Grid.Row="1" Style="{StaticResource Card}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,12,10,6">
+              <StackPanel x:Name="PanelSource"/>
+            </ScrollViewer>
+          </Border>
+
+          <TextBlock Grid.Row="2" Style="{StaticResource Caption}" Margin="0,6,0,0"
+                     Text="{Binding SourceCounter}"/>
+        </Grid>
+
+        <Grid Grid.Row="1">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Style="{StaticResource FieldLabel}" Text="КАТЕГОРИИ ПРИЁМНИКА"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,-6,0,0">
+              <Button x:Name="BtnReceiverAll" Content="Все" Style="{StaticResource Button.Flat}"
+                      MinWidth="0" Padding="10,4,10,4" Margin="0,0,6,0"/>
+              <Button x:Name="BtnReceiverNone" Content="Ничего" Style="{StaticResource Button.Flat}"
+                      MinWidth="0" Padding="10,4,10,4"/>
+            </StackPanel>
+          </Grid>
+
+          <Border Grid.Row="1" Style="{StaticResource Card}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,12,10,6">
+              <StackPanel x:Name="PanelReceiver"/>
+            </ScrollViewer>
+          </Border>
+
+          <TextBlock Grid.Row="2" Style="{StaticResource Caption}" Margin="0,6,0,0"
+                     Text="{Binding ReceiverCounter}"/>
+        </Grid>
+      </Grid>
+
+      <!-- ===== Правая колонка: параметры, режим, фильтр ===== -->
+      <Border Grid.Column="1" Style="{StaticResource Card}" Margin="14,0,0,0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="18,16,14,16">
+          <StackPanel>
+
+            <TextBlock Style="{StaticResource FieldLabel}" Text="ПАРАМЕТР ИСТОЧНИКА"/>
+            <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,6"
+                       TextWrapping="Wrap"
+                       Text="Откуда берём значение. Можно выбрать из параметров проекта или ввести вручную."/>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBox x:Name="TxtSourceParam" Grid.Column="0" Style="{StaticResource TextBox.Field}"/>
+              <Button x:Name="BtnSourceParam" Grid.Column="1" Content="Выбрать…"
+                      Style="{StaticResource Button.Flat}" Margin="8,0,0,0" Padding="14,7"
+                      ToolTip="Выбрать параметр источника из параметров проекта"/>
+            </Grid>
+
+            <TextBlock Style="{StaticResource FieldLabel}" Margin="0,16,0,0" Text="ПАРАМЕТР ПРИЁМНИКА"/>
+            <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,6"
+                       TextWrapping="Wrap"
+                       Text="Куда записываем. В списке — параметры экземпляра выбранных категорий."/>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBox x:Name="TxtReceiverParam" Grid.Column="0" Style="{StaticResource TextBox.Field}"/>
+              <Button x:Name="BtnReceiverParam" Grid.Column="1" Content="Выбрать…"
+                      Style="{StaticResource Button.Flat}" Margin="8,0,0,0" Padding="14,7"
+                      ToolTip="Выбрать параметр приёмника из параметров проекта"/>
+            </Grid>
+
+            <Border Style="{StaticResource Rule}" Margin="0,18,0,18"/>
+
+            <TextBlock Style="{StaticResource FieldLabel}" Text="РЕЖИМ ОБРАБОТКИ"/>
+            <WrapPanel>
+              <RadioButton x:Name="ChipWholeModel" Style="{StaticResource RadioButton.Chip}"
+                           GroupName="Scope" Content="Вся модель" MinWidth="0"
+                           ToolTip="Искать источники и приёмники по всей модели"/>
+              <RadioButton x:Name="ChipActiveView" Style="{StaticResource RadioButton.Chip}"
+                           GroupName="Scope" Content="Текущий вид" MinWidth="0"
+                           ToolTip="Ограничиться элементами активного вида"/>
+              <RadioButton x:Name="ChipManualSource" Style="{StaticResource RadioButton.Chip}"
+                           GroupName="Scope" Content="Источник вручную" MinWidth="0"
+                           ToolTip="Источники выбираются мышью в модели"/>
+              <RadioButton x:Name="ChipManualReceiver" Style="{StaticResource RadioButton.Chip}"
+                           GroupName="Scope" Content="Приёмник вручную" MinWidth="0"
+                           ToolTip="Приёмники выбираются мышью в модели"/>
+            </WrapPanel>
+            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" Text="{Binding ScopeHint}"/>
+
+            <Border Style="{StaticResource Rule}" Margin="0,18,0,18"/>
+
+            <CheckBox x:Name="ChkChain" Style="{StaticResource PP.CheckBox}"
+                      Content="Заполнять разрывы по цепочке (одна система)"/>
+            <TextBlock Style="{StaticResource Caption}" Margin="23,4,0,0"
+                       Text="Значение протянется через промежуточные элементы без источника, пока цепочка соединений не прервётся."/>
+
+            <Border Style="{StaticResource Rule}" Margin="0,18,0,18"/>
+
+            <TextBlock Style="{StaticResource FieldLabel}" Text="ФИЛЬТР ЭЛЕМЕНТОВ"/>
+            <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,8"
+                       Text="Сужает набор до элементов, подходящих под условия."/>
+            <!-- Контрол фильтра добавляется кодом: он общий с «Проверкой спецификации» -->
+            <ContentControl x:Name="FilterHost"/>
+
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+    </Grid>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="2" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="3" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtStatus" Grid.Column="0"
+                 Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}"
+                 Text="{Binding Status}"
+                 Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnCancel" Content="Отмена" Style="{StaticResource Button.Flat}" Margin="0,0,8,0"/>
+        <Button x:Name="BtnRun" Content="Передать" Style="{StaticResource Button.Primary}"
+                IsEnabled="{Binding IsValid}"/>
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Window>

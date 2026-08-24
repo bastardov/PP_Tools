@@ -1,0 +1,418 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Инструменты меток"
+        Width="1140"
+        Height="800"
+        MinWidth="980"
+        MinHeight="620"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>   <!-- заголовок -->
+      <RowDefinition Height="Auto"/>   <!-- переключатель режима -->
+      <RowDefinition Height="*" MinHeight="260"/>  <!-- рабочая область -->
+      <RowDefinition Height="Auto"/>   <!-- разделитель -->
+      <RowDefinition Height="Auto"/>   <!-- подвал -->
+    </Grid.RowDefinitions>
+
+    <Grid Grid.Row="0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <StackPanel Grid.Column="0" Margin="0,0,16,0">
+        <TextBlock Style="{StaticResource H1}" Text="Инструменты меток"/>
+        <TextBlock Style="{StaticResource Subtitle}" Margin="0,2,0,0"
+                   TextWrapping="Wrap"
+                   Text="{Binding ModeHint}"/>
+      </StackPanel>
+
+      <StackPanel Grid.Column="1" Width="270"
+                  Visibility="{Binding FamilyMode, Converter={StaticResource BoolVis}}">
+        <TextBlock Style="{StaticResource FieldLabel}" Text="ВЗЯТЬ ГОТОВУЮ МАРКУ С ПЛАНА"/>
+
+        <Button x:Name="BtnPickType" Content="Скопировать для типа"
+                Style="{StaticResource Button.Flat}"
+                Margin="0,6,0,0"
+                ToolTip="Окно закроется, вы покажете марки на виде — и их тип запишется типам помеченных элементов"/>
+
+        <Button x:Name="BtnPickFamily" Content="Скопировать для семейства"
+                Style="{StaticResource Button.Flat}"
+                Margin="0,6,0,0"
+                ToolTip="То же самое, но правило пишется на всё семейство помеченного элемента"/>
+      </StackPanel>
+    </Grid>
+
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">
+      <RadioButton x:Name="RbModeFamily" Style="{StaticResource RadioButton.Chip}"
+                   GroupName="Mode" Content="По семейству и типу"
+                   ToolTip="Марка привязана к семейству или типу элемента"/>
+      <RadioButton x:Name="RbModeSize" Style="{StaticResource RadioButton.Chip}"
+                   GroupName="Mode" Content="Воздуховоды"
+                   ToolTip="Марка подбирается по длине надписи, а строку можно сузить до семейства или типа воздуховода"/>
+    </StackPanel>
+
+    <Grid Grid.Row="2" Margin="0,14,0,0">
+
+      <!-- ================= Режим 1: по семейству и типу ================= -->
+      <Grid x:Name="GridFamily"
+            Visibility="{Binding FamilyMode, Converter={StaticResource BoolVis}}">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="220"/>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="300"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ===== Слева: категории ===== -->
+        <Grid Grid.Column="0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+
+          <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}" Text="КАТЕГОРИЯ"/>
+
+          <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,6,0,0">
+            <ListBox x:Name="LstCategories"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Padding="6,8,6,8"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.Resources>
+                <Style TargetType="ListBoxItem" BasedOn="{StaticResource PP.ListBoxItem}"/>
+              </ListBox.Resources>
+            </ListBox>
+          </Border>
+        </Grid>
+
+        <!-- ===== Центр: дерево семейств и типов ===== -->
+        <Grid Grid.Column="1" Margin="14,0,14,0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+
+          <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}"
+                     Text="СЕМЕЙСТВА И ТИПЫ В ПРОЕКТЕ"/>
+
+          <TextBox x:Name="TxtSearch" Grid.Row="1"
+                   Style="{StaticResource TextBox.Field}"
+                   Margin="0,6,0,8"
+                   Tag="Поиск по имени семейства или типа"
+                   ToolTip="Показывать только семейства и типы, где встречается этот текст"/>
+
+          <Border Grid.Row="2" Style="{StaticResource Card}">
+            <Grid>
+              <TreeView x:Name="Tree"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="8,8,4,8"
+                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                        ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <TreeView.Resources>
+                  <Style TargetType="TreeViewItem" BasedOn="{StaticResource PP.TreeViewItem}"/>
+                </TreeView.Resources>
+              </TreeView>
+
+              <TextBlock x:Name="TxtTreeEmpty"
+                         Style="{StaticResource EmptyState}"
+                         Visibility="Collapsed"
+                         Text="Выберите категорию слева."/>
+            </Grid>
+          </Border>
+        </Grid>
+
+        <!-- ===== Справа: назначение и шаблон ===== -->
+        <Grid Grid.Column="2">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>   <!-- марка и назначение -->
+            <RowDefinition Height="*"/>      <!-- распорка -->
+            <RowDefinition Height="Auto"/>   <!-- шаблон правил -->
+          </Grid.RowDefinitions>
+
+          <StackPanel Grid.Row="0">
+            <TextBlock Style="{StaticResource FieldLabel}" Text="МАРКА ДЛЯ ВЫДЕЛЕННОГО"/>
+
+            <ComboBox x:Name="CmbMark"
+                      Style="{StaticResource PP.ComboBox}"
+                      Margin="0,6,0,0"
+                      ToolTip="Семейство и тип марки, загруженные в проект"/>
+
+            <Button x:Name="BtnAssign" Content="Назначить"
+                    Style="{StaticResource Button.Primary}"
+                    Margin="0,8,0,0"
+                    IsEnabled="{Binding CanAssign}"
+                    ToolTip="Записать марку выделенному узлу дерева"/>
+
+            <Button x:Name="BtnClear" Content="Очистить назначение"
+                    Style="{StaticResource Button.Flat}"
+                    Margin="0,6,0,0"
+                    IsEnabled="{Binding HasSelection}"
+                    ToolTip="Убрать правило выделенного узла"/>
+
+            <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0"
+                       TextWrapping="Wrap"
+                       Text="Назначение семейству действует на все его типы. Назначение типу перекрывает семейство. Пустое дерево или пустой список марок означают, что в проект ничего не загружено."/>
+          </StackPanel>
+
+          <StackPanel Grid.Row="2">
+            <Border Style="{StaticResource Rule}" Margin="0,14,0,0"/>
+
+            <TextBlock Style="{StaticResource FieldLabel}" Margin="0,14,0,0"
+                       Text="ШАБЛОН ПРАВИЛ"/>
+
+            <TextBlock Style="{StaticResource Body}" Margin="0,6,0,0"
+                       Text="{Binding RulesInfo}"/>
+
+            <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0"
+                       Text="ИМПОРТ:"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+              <RadioButton x:Name="RbReplace" Style="{StaticResource RadioButton.Chip}"
+                           GroupName="ImportMode" Content="Заменить"
+                           ToolTip="Импортированные правила заменят все текущие"/>
+              <RadioButton x:Name="RbAppend" Style="{StaticResource RadioButton.Chip}"
+                           GroupName="ImportMode" Content="Добавить"
+                           ToolTip="Импортированные правила добавятся к текущим"/>
+            </StackPanel>
+
+            <!-- Колонка фиксированной ширины: ряд кнопок только через WrapPanel -->
+            <WrapPanel Margin="0,10,0,0">
+              <Button x:Name="BtnExport" Content="Экспорт…"
+                      Style="{StaticResource Button.Flat}"
+                      Padding="14,8" Margin="0,0,6,6"
+                      ToolTip="Сохранить весь шаблон правил в файл .json"/>
+              <Button x:Name="BtnImport" Content="Импорт…"
+                      Style="{StaticResource Button.Flat}"
+                      Padding="14,8" Margin="0,0,6,6"
+                      ToolTip="Прочитать правила из файла .json"/>
+            </WrapPanel>
+          </StackPanel>
+        </Grid>
+      </Grid>
+
+      <!-- ================= Режим 2: по размеру ================= -->
+      <Grid x:Name="GridSize"
+            Visibility="{Binding SizeMode, Converter={StaticResource BoolVis}}">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="240"/>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="320"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ===== Слева: пресеты ===== -->
+        <Grid Grid.Column="0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}"
+                     Text="ПРЕСЕТ"/>
+
+          <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,6,0,0">
+            <ListBox x:Name="LstPresets"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Padding="6,8,6,8"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ToolTip="Набор строк под свою задачу — щёлкните, чтобы работать с ним">
+              <ListBox.Resources>
+                <Style TargetType="ListBoxItem" BasedOn="{StaticResource PP.ListBoxItem}"/>
+              </ListBox.Resources>
+            </ListBox>
+          </Border>
+
+          <StackPanel Grid.Row="2">
+            <TextBox x:Name="TxtPresetName"
+                     Style="{StaticResource TextBox.Field}"
+                     Margin="0,8,0,0"
+                     Tag="Имя пресета — например Планы 1:100"
+                     ToolTip="Имя для нового пресета или новое имя выделенного"/>
+
+            <WrapPanel Margin="0,8,0,0">
+              <Button x:Name="BtnPresetAdd" Content="Создать"
+                      Style="{StaticResource Button.Flat}"
+                      Padding="14,8" Margin="0,0,6,6"
+                      ToolTip="Создать пустой пресет с именем из поля выше"/>
+              <Button x:Name="BtnPresetRename" Content="Переименовать"
+                      Style="{StaticResource Button.Flat}"
+                      Padding="14,8" Margin="0,0,6,6"
+                      ToolTip="Дать выделенному пресету имя из поля выше"/>
+              <Button x:Name="BtnPresetDelete" Content="Удалить"
+                      Style="{StaticResource Button.Flat}"
+                      Padding="14,8" Margin="0,0,6,6"
+                      ToolTip="Убрать выделенный пресет вместе со строками"/>
+            </WrapPanel>
+
+            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
+                       TextWrapping="Wrap"
+                       Text="Выделенный пресет становится активным: «Применить по шаблону» работает по нему."/>
+          </StackPanel>
+        </Grid>
+
+        <!-- ===== Центр: строки пресета ===== -->
+        <Grid Grid.Column="1" Margin="14,0,14,0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}"
+                     Text="СТРОКИ ПРЕСЕТА"/>
+
+          <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,6,0,0">
+            <Grid>
+              <ListBox x:Name="LstSizeRules"
+                       Background="Transparent"
+                       BorderThickness="0"
+                       Padding="6,8,6,8"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.Resources>
+                  <Style TargetType="ListBoxItem" BasedOn="{StaticResource PP.ListBoxItem}"/>
+                </ListBox.Resources>
+              </ListBox>
+
+              <TextBlock x:Name="TxtSizeEmpty"
+                         Style="{StaticResource EmptyState}"
+                         Visibility="Collapsed"
+                         TextWrapping="Wrap"
+                         Text="Строк пока нет. Задайте справа, на какие воздуховоды действует правило, длину надписи и марку, затем нажмите «Добавить строку»."/>
+            </Grid>
+          </Border>
+
+          <StackPanel Grid.Row="2">
+            <TextBlock Style="{StaticResource Body}" Margin="0,10,0,0"
+                       TextWrapping="Wrap"
+                       Foreground="{Binding CoverageBrush}"
+                       Text="{Binding Coverage}"/>
+
+            <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0"
+                       TextWrapping="Wrap"
+                       Text="Длина надписи считается по всему готовому тексту марки: «1000х500» — 8 знаков, «ДВ 10, 1000х500» — 15. Диапазоны внутри одной области не пересекаются, зато их можно поставить лесенкой и закрыть все длины. У круглых и прямоугольных области разные, поэтому одинаковая длина им не мешает. Щёлкните по строке, чтобы открыть её в полях справа."/>
+          </StackPanel>
+        </Grid>
+
+        <!-- ===== Справа: редактор строки ===== -->
+        <Grid Grid.Column="2">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <StackPanel Grid.Row="0">
+            <TextBlock Style="{StaticResource FieldLabel}"
+                       Text="НА КАКИЕ ВОЗДУХОВОДЫ"/>
+
+            <ComboBox x:Name="CmbSizeScope"
+                      Style="{StaticResource PP.ComboBox}"
+                      Margin="0,6,0,0"
+                      ToolTip="Все воздуховоды, одно семейство целиком или отдельный тип. Правило типа важнее правила семейства, правило семейства важнее общего"/>
+
+            <TextBlock Style="{StaticResource FieldLabel}" Margin="0,14,0,0"
+                       Text="ДЛИНА НАДПИСИ, ЗНАКОВ"/>
+
+            <Grid Margin="0,6,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+
+              <TextBox x:Name="TxtLenMin" Grid.Column="0"
+                       Style="{StaticResource TextBox.Field}"
+                       Tag="от — например 1"
+                       ToolTip="Нижняя граница диапазона, включительно"/>
+
+              <TextBox x:Name="TxtLenMax" Grid.Column="2"
+                       Style="{StaticResource TextBox.Field}"
+                       Tag="до — пусто значит без предела"
+                       ToolTip="Верхняя граница диапазона, включительно. Пусто — «и длиннее»"/>
+            </Grid>
+
+            <TextBlock Style="{StaticResource FieldLabel}" Margin="0,14,0,0"
+                       Text="МАРКА"/>
+
+            <ComboBox x:Name="CmbSizeMark"
+                      Style="{StaticResource PP.ComboBox}"
+                      Margin="0,6,0,0"
+                      ToolTip="Семейство и тип марки, загруженные в проект"/>
+
+            <!-- Колонка фиксированной ширины: ряд кнопок только через WrapPanel -->
+            <WrapPanel Margin="0,12,0,0">
+              <Button x:Name="BtnSizeAdd" Content="Добавить строку"
+                      Style="{StaticResource Button.Primary}"
+                      Padding="14,8" Margin="0,0,6,6"
+                      IsEnabled="{Binding CanEditSize}"
+                      ToolTip="Записать в пресет новую строку с этими значениями"/>
+              <Button x:Name="BtnSizeApply" Content="Изменить строку"
+                      Style="{StaticResource Button.Flat}"
+                      Padding="14,8" Margin="0,0,6,6"
+                      IsEnabled="{Binding CanChangeSizeRow}"
+                      ToolTip="Переписать выделенную строку значениями из полей выше"/>
+              <Button x:Name="BtnSizeDelete" Content="Удалить строку"
+                      Style="{StaticResource Button.Flat}"
+                      Padding="14,8" Margin="0,0,6,6"
+                      IsEnabled="{Binding HasSizeRow}"
+                      ToolTip="Убрать выделенную строку из пресета"/>
+            </WrapPanel>
+          </StackPanel>
+
+          <StackPanel Grid.Row="2">
+            <TextBlock Style="{StaticResource FieldLabel}" Margin="0,14,0,0"
+                       Text="{Binding SizePreviewTitle}"/>
+
+            <Border Style="{StaticResource Card.Result}" Margin="0,6,0,0">
+              <TextBlock Style="{StaticResource Body.Result}"
+                         TextWrapping="Wrap"
+                         Foreground="{Binding SizePreviewBrush}"
+                         Text="{Binding SizePreview}"/>
+            </Border>
+          </StackPanel>
+        </Grid>
+      </Grid>
+    </Grid>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="3" Style="{StaticResource Rule}" Margin="0,14,0,0"/>
+
+    <Grid Grid.Row="4" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtStatus" Grid.Column="0"
+                 Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}"
+                 Text="{Binding Status}"
+                 TextWrapping="Wrap"
+                 VerticalAlignment="Center"
+                 Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnCancel" Content="Отмена"
+                Style="{StaticResource Button.Flat}" Margin="0,0,8,0"/>
+        <Button x:Name="BtnSave" Content="Сохранить"
+                Style="{StaticResource Button.Primary}"/>
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Window>

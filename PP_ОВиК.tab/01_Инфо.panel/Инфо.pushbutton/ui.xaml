@@ -1,0 +1,123 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Инфо"
+        Width="520"
+        Height="720"
+        MinWidth="520"
+        MinHeight="520"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>   <!-- логотип -->
+      <RowDefinition Height="Auto"/>   <!-- название -->
+      <RowDefinition Height="*"/>      <!-- сведения -->
+      <RowDefinition Height="Auto"/>   <!-- разделитель -->
+      <RowDefinition Height="Auto"/>   <!-- подвал -->
+    </Grid.RowDefinitions>
+
+    <!-- ===== Логотип. Фон карточки повторяет фон самой картинки ===== -->
+    <Border Grid.Row="0" Height="260" CornerRadius="4"
+            Background="{StaticResource LogoBackdrop}"
+            SnapsToDevicePixels="True">
+      <Image x:Name="ImgLogo" Stretch="Uniform" Margin="0"/>
+    </Border>
+
+    <!-- ===== Название ===== -->
+    <StackPanel Grid.Row="1" Margin="0,14,0,0">
+      <TextBlock Style="{StaticResource H1}" Text="PP Tools"/>
+      <TextBlock Style="{StaticResource Subtitle}" Margin="0,2,0,0"
+                 Text="Плагин автоматизации Revit — ОВиК и BIM"/>
+    </StackPanel>
+
+    <!-- ===== Сведения ===== -->
+    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,14,0,0">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,12,10,12">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="130"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Caption}" Margin="0,0,10,8" Text="Разработчик"/>
+          <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource Body}" Margin="0,0,0,8" Text="{Binding Developer}"/>
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Caption}" Margin="0,0,10,8" Text="Состав"/>
+          <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Body}" Margin="0,0,0,8" Text="{Binding Composition}"/>
+
+          <Border Grid.Row="2" Grid.ColumnSpan="2" Style="{StaticResource Rule}" Margin="0,4,0,12"/>
+
+          <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource Caption}" Margin="0,0,10,8" Text="Revit"/>
+          <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource Body}" Margin="0,0,0,8" Text="{Binding RevitVersion}"/>
+
+          <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource Caption}" Margin="0,0,10,8" Text="pyRevit"/>
+          <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource Body}" Margin="0,0,0,8" Text="{Binding PyRevitVersion}"/>
+
+          <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource Caption}" Margin="0,0,10,8" Text="Интерпретатор"/>
+          <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource Body}" Margin="0,0,0,8" Text="{Binding PythonVersion}"/>
+
+          <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource Caption}" Margin="0,0,10,8" Text="Пользователь"/>
+          <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource Body}" Margin="0,0,0,8" Text="{Binding UserName}"/>
+
+          <Border Grid.Row="7" Grid.ColumnSpan="2" Style="{StaticResource Rule}" Margin="0,4,0,12"/>
+
+          <TextBlock Grid.Row="8" Grid.Column="0" Style="{StaticResource Caption}" Margin="0,0,10,0" Text="Расположение"/>
+          <StackPanel Grid.Row="8" Grid.Column="1">
+            <TextBlock Style="{StaticResource Body}" Text="{Binding ExtensionPath}"/>
+            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" Text="{Binding UpdatedAt}"/>
+          </StackPanel>
+
+        </Grid>
+      </ScrollViewer>
+    </Border>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="3" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="4" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtStatus" Grid.Column="0"
+                 Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}"
+                 Text="{Binding Status}"
+                 Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnFolder" Content="Открыть папку" Style="{StaticResource Button.Flat}"
+                Margin="0,0,8,0" MinWidth="0" Padding="14,8,14,8"
+                ToolTip="Показать папку расширения в проводнике"/>
+        <Button x:Name="BtnCopy" Content="Скопировать сведения" Style="{StaticResource Button.Flat}"
+                Margin="0,0,8,0" MinWidth="0" Padding="14,8,14,8"
+                ToolTip="Положить всё содержимое окна в буфер обмена"/>
+        <Button x:Name="BtnClose" Content="Закрыть" Style="{StaticResource Button.Primary}"
+                MinWidth="100"/>
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Window>

@@ -1,0 +1,362 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PP Tools — настройки"
+        Width="900"
+        Height="660"
+        MinWidth="760"
+        MinHeight="560"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>   <!-- заголовок -->
+      <RowDefinition Height="*"/>      <!-- меню + содержимое -->
+      <RowDefinition Height="Auto"/>   <!-- разделитель -->
+      <RowDefinition Height="Auto"/>   <!-- подвал -->
+    </Grid.RowDefinitions>
+
+    <!-- ===== Заголовок ===== -->
+    <StackPanel Grid.Row="0">
+      <TextBlock Style="{StaticResource H1}" Text="Настройки"/>
+      <TextBlock Style="{StaticResource Subtitle}" Margin="0,2,0,0"
+                 Text="Общие параметры инструментов PP Tools. Изменения записываются на диск только по кнопке «Сохранить»."/>
+    </StackPanel>
+
+    <!-- ===== Меню разделов + содержимое ===== -->
+    <Grid Grid.Row="1" Margin="0,14,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="196"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <Border Grid.Column="0" Style="{StaticResource Card}" Padding="4">
+        <ListBox x:Name="LstSections"
+                 BorderThickness="0" Background="Transparent"
+                 ItemContainerStyle="{StaticResource PP.NavItem}"
+                 HorizontalContentAlignment="Stretch">
+          <ListBoxItem Content="Общие"/>
+          <ListBoxItem Content="Прокси-контроллер"/>
+          <ListBoxItem Content="Оформление"/>
+          <ListBoxItem Content="Теплопотери"/>
+          <ListBoxItem Content="Проверка"/>
+          <ListBoxItem Content="Экспорт и импорт"/>
+        </ListBox>
+      </Border>
+
+      <Border Grid.Column="1" Style="{StaticResource Card}" Margin="14,0,0,0">
+        <Grid>
+
+          <!-- ============================================================
+               Раздел «Общие»
+               ============================================================ -->
+          <ScrollViewer x:Name="SecGeneral" VerticalScrollBarVisibility="Auto" Padding="18,16,14,16"
+                        Visibility="{Binding IsGeneral, Converter={StaticResource BoolVis}}">
+            <StackPanel>
+              <TextBlock Style="{StaticResource FieldLabel}" Text="ОТЧЁТЫ ПОСЛЕ ВЫПОЛНЕНИЯ"/>
+
+              <CheckBox x:Name="ChkSuccess" Style="{StaticResource PP.CheckBox}" Margin="0,0,0,8"
+                        Content="Показывать отчёт после успешного выполнения"/>
+              <CheckBox x:Name="ChkWarning" Style="{StaticResource PP.CheckBox}"
+                        Content="Показывать отчёт, если есть пропуски или ошибки"/>
+
+              <Border Style="{StaticResource Rule}" Margin="0,18,0,18"/>
+
+              <TextBlock Style="{StaticResource FieldLabel}" Text="ПАРА ТРУБ"/>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,6"
+                         Text="Максимальное расстояние, на котором две трубы считаются подающей и обратной одной пары."/>
+              <StackPanel Orientation="Horizontal">
+                <TextBox x:Name="TxtDistance" Style="{StaticResource TextBox.Field}" Width="120"
+                         ToolTip="Расстояние в миллиметрах, больше нуля"/>
+                <TextBlock Style="{StaticResource Caption}" Text="мм" Margin="8,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- ============================================================
+               Раздел «Прокси-контроллер»
+               ============================================================ -->
+          <ScrollViewer x:Name="SecProxy" VerticalScrollBarVisibility="Auto" Padding="18,16,14,16"
+                        Visibility="{Binding IsProxy, Converter={StaticResource BoolVis}}">
+            <StackPanel>
+
+              <StackPanel x:Name="BoxRuleCodes" Margin="0,0,0,20">
+                <TextBlock Style="{StaticResource FieldLabel}" Text="КОДЫ ПРАВИЛ"/>
+                <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,6"
+                           Text="Служебные коды, по которым прокси-контроллер узнаёт правило."/>
+                <Border Style="{StaticResource Card}" Height="140">
+                  <Grid>
+                    <ListBox x:Name="LstRuleCodes" ItemsSource="{Binding Items}"
+                             ItemContainerStyle="{StaticResource PP.ListBoxItem}"
+                             BorderThickness="0" Background="Transparent" Padding="4"/>
+                    <TextBlock Style="{StaticResource EmptyState}"
+                               Visibility="{Binding IsEmpty, Converter={StaticResource BoolVis}}"
+                               Text="Список пуст. Введите значение ниже и нажмите «Добавить»."/>
+                  </Grid>
+                </Border>
+                <Grid Margin="0,8,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBox x:Name="TxtRuleCodes" Grid.Column="0" Style="{StaticResource TextBox.Field}" Margin="0,0,8,0"/>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="BtnAddRuleCodes" Content="Добавить" Style="{StaticResource Button.Flat}" MinWidth="0" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnSetRuleCodes" Content="Заменить" Style="{StaticResource Button.Flat}" MinWidth="0" Margin="0,0,6,0"
+                            ToolTip="Записать текст из поля в выбранную строку"/>
+                    <Button x:Name="BtnDelRuleCodes" Content="Удалить" Style="{StaticResource Button.Flat}" MinWidth="0"
+                            ToolTip="Удалить выбранную строку. Пока окно не сохранено, ничего не потеряно"/>
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+
+              <StackPanel x:Name="BoxPosTypes">
+                <TextBlock Style="{StaticResource FieldLabel}" Text="ТИПЫ ПОЗИЦИЙ"/>
+                <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,6"
+                           Text="Значения, которые предлагаются при создании прокси-позиции."/>
+                <Border Style="{StaticResource Card}" Height="140">
+                  <Grid>
+                    <ListBox x:Name="LstPosTypes" ItemsSource="{Binding Items}"
+                             ItemContainerStyle="{StaticResource PP.ListBoxItem}"
+                             BorderThickness="0" Background="Transparent" Padding="4"/>
+                    <TextBlock Style="{StaticResource EmptyState}"
+                               Visibility="{Binding IsEmpty, Converter={StaticResource BoolVis}}"
+                               Text="Список пуст. Введите значение ниже и нажмите «Добавить»."/>
+                  </Grid>
+                </Border>
+                <Grid Margin="0,8,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBox x:Name="TxtPosTypes" Grid.Column="0" Style="{StaticResource TextBox.Field}" Margin="0,0,8,0"/>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="BtnAddPosTypes" Content="Добавить" Style="{StaticResource Button.Flat}" MinWidth="0" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnSetPosTypes" Content="Заменить" Style="{StaticResource Button.Flat}" MinWidth="0" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnDelPosTypes" Content="Удалить" Style="{StaticResource Button.Flat}" MinWidth="0"/>
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- ============================================================
+               Раздел «Оформление»
+               ============================================================ -->
+          <ScrollViewer x:Name="SecSheets" VerticalScrollBarVisibility="Auto" Padding="18,16,14,16"
+                        Visibility="{Binding IsSheets, Converter={StaticResource BoolVis}}">
+            <StackPanel>
+
+              <StackPanel x:Name="BoxSheetPrefixes" Margin="0,0,0,20">
+                <TextBlock Style="{StaticResource FieldLabel}" Text="НАЧАЛА ИМЕНИ ЛИСТА"/>
+                <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,6"
+                           Text="Используются инструментом «Заполнить имя листа по видам»."/>
+                <Border Style="{StaticResource Card}" Height="120">
+                  <Grid>
+                    <ListBox x:Name="LstSheetPrefixes" ItemsSource="{Binding Items}"
+                             ItemContainerStyle="{StaticResource PP.ListBoxItem}"
+                             BorderThickness="0" Background="Transparent" Padding="4"/>
+                    <TextBlock Style="{StaticResource EmptyState}"
+                               Visibility="{Binding IsEmpty, Converter={StaticResource BoolVis}}"
+                               Text="Список пуст. Введите значение ниже и нажмите «Добавить»."/>
+                  </Grid>
+                </Border>
+                <Grid Margin="0,8,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBox x:Name="TxtSheetPrefixes" Grid.Column="0" Style="{StaticResource TextBox.Field}" Margin="0,0,8,0"/>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="BtnAddSheetPrefixes" Content="Добавить" Style="{StaticResource Button.Flat}" MinWidth="0" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnSetSheetPrefixes" Content="Заменить" Style="{StaticResource Button.Flat}" MinWidth="0" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnDelSheetPrefixes" Content="Удалить" Style="{StaticResource Button.Flat}" MinWidth="0"/>
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+
+              <StackPanel x:Name="BoxLocationMap" Margin="0,0,0,20">
+                <TextBlock Style="{StaticResource FieldLabel}" Text="СЛОВАРЬ ЛОКАЦИЙ"/>
+                <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,6"
+                           Text="Формат: ключ = значение. Например: Подвал = План подвала."/>
+                <Border Style="{StaticResource Card}" Height="120">
+                  <Grid>
+                    <ListBox x:Name="LstLocationMap" ItemsSource="{Binding Items}"
+                             ItemContainerStyle="{StaticResource PP.ListBoxItem}"
+                             BorderThickness="0" Background="Transparent" Padding="4"/>
+                    <TextBlock Style="{StaticResource EmptyState}"
+                               Visibility="{Binding IsEmpty, Converter={StaticResource BoolVis}}"
+                               Text="Список пуст. Введите «ключ = значение» ниже и нажмите «Добавить»."/>
+                  </Grid>
+                </Border>
+                <Grid Margin="0,8,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBox x:Name="TxtLocationMap" Grid.Column="0" Style="{StaticResource TextBox.Field}" Margin="0,0,8,0"/>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="BtnAddLocationMap" Content="Добавить" Style="{StaticResource Button.Flat}" MinWidth="0" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnSetLocationMap" Content="Заменить" Style="{StaticResource Button.Flat}" MinWidth="0" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnDelLocationMap" Content="Удалить" Style="{StaticResource Button.Flat}" MinWidth="0"/>
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+
+              <StackPanel x:Name="BoxSectionMap">
+                <TextBlock Style="{StaticResource FieldLabel}" Text="СЛОВАРЬ РАЗДЕЛОВ"/>
+                <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,6"
+                           Text="Формат: ключ = значение. Например: ПД = Противодымная вентиляция."/>
+                <Border Style="{StaticResource Card}" Height="120">
+                  <Grid>
+                    <ListBox x:Name="LstSectionMap" ItemsSource="{Binding Items}"
+                             ItemContainerStyle="{StaticResource PP.ListBoxItem}"
+                             BorderThickness="0" Background="Transparent" Padding="4"/>
+                    <TextBlock Style="{StaticResource EmptyState}"
+                               Visibility="{Binding IsEmpty, Converter={StaticResource BoolVis}}"
+                               Text="Список пуст. Введите «ключ = значение» ниже и нажмите «Добавить»."/>
+                  </Grid>
+                </Border>
+                <Grid Margin="0,8,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBox x:Name="TxtSectionMap" Grid.Column="0" Style="{StaticResource TextBox.Field}" Margin="0,0,8,0"/>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="BtnAddSectionMap" Content="Добавить" Style="{StaticResource Button.Flat}" MinWidth="0" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnSetSectionMap" Content="Заменить" Style="{StaticResource Button.Flat}" MinWidth="0" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnDelSectionMap" Content="Удалить" Style="{StaticResource Button.Flat}" MinWidth="0"/>
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- ============================================================
+               Раздел «Теплопотери»
+               ============================================================ -->
+          <ScrollViewer x:Name="SecHeat" VerticalScrollBarVisibility="Auto" Padding="18,16,14,16"
+                        Visibility="{Binding IsHeatloss, Converter={StaticResource BoolVis}}">
+            <StackPanel>
+              <TextBlock Style="{StaticResource FieldLabel}" Text="ПЕРЕНОС ДАННЫХ ИЗ ПРОСТРАНСТВ"/>
+
+              <CheckBox x:Name="ChkOrientation" Style="{StaticResource PP.CheckBox}"
+                        Content="Определять сторону света при переносе данных"/>
+              <ToggleButton x:Name="TglOrientation" Style="{StaticResource ToggleButton.Expander}"
+                            Margin="-6,4,0,0" Content="Подробнее"/>
+              <TextBlock Style="{StaticResource Caption}" Margin="20,4,0,0"
+                         Visibility="{Binding IsChecked, ElementName=TglOrientation, Converter={StaticResource BoolVis}}"
+                         Text="Если выключено, инструмент «Перенос данных из пространств» не будет менять параметры «PP_Ориентация по стороне света» и «PP_Добавка на сторону света». Нужно при повторном запуске, когда переносят только имя и номер системы и не хотят затереть вручную скорректированные стороны света."/>
+
+              <Border Style="{StaticResource Rule}" Margin="0,18,0,18"/>
+
+              <CheckBox x:Name="ChkHeatReport" Style="{StaticResource PP.CheckBox}"
+                        Content="Показывать отчёт pyRevit после переноса данных"/>
+              <ToggleButton x:Name="TglHeatReport" Style="{StaticResource ToggleButton.Expander}"
+                            Margin="-6,4,0,0" Content="Подробнее"/>
+              <StackPanel Margin="20,4,0,0"
+                          Visibility="{Binding IsChecked, ElementName=TglHeatReport, Converter={StaticResource BoolVis}}">
+                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8"
+                           Text="Что это. Серое окно-терминал, которое открывается сбоку после переноса и построчно выводит лог по каждому элементу: Id и марка стены, витража, перекрытия или прибора, из какого пространства взяты данные и каким способом — обычный зонд, IPIS или fallback."/>
+                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8"
+                           Text="Зачем нужен. Кроме сводки показывает, какие именно элементы получили данные и насколько надёжен результат. Ловит строки «fallback» (зонды не нашли пространство) и «ПРОВЕРИТЬ» — признак проблем с расчётом объёмов или с фазой у пространств."/>
+                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8"
+                           Text="Когда включать. Первый перенос на новом проекте; появились fallback или пропуски; спорная геометрия и витражи; нужно вручную сверить привязку элементов к пространствам."/>
+                <TextBlock Style="{StaticResource Caption}"
+                           Text="Когда убирать. Рутинный повторный перенос на проверенной модели. Сводка всё равно покажется, а полный лог в любом случае пишется в PP_перенос_отчёт.txt в папке TEMP."/>
+              </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- ============================================================
+               Раздел «Проверка»
+               ============================================================ -->
+          <ScrollViewer x:Name="SecCheck" VerticalScrollBarVisibility="Auto" Padding="18,16,14,16"
+                        Visibility="{Binding IsCheck, Converter={StaticResource BoolVis}}">
+            <StackPanel>
+              <TextBlock Style="{StaticResource FieldLabel}" Text="ПЕРЕДАЧА ПАРАМЕТРОВ ПО MEP"/>
+
+              <CheckBox x:Name="ChkMepReport" Style="{StaticResource PP.CheckBox}"
+                        Content="Показывать отчёт pyRevit после передачи по MEP"/>
+              <ToggleButton x:Name="TglMepReport" Style="{StaticResource ToggleButton.Expander}"
+                            Margin="-6,4,0,0" Content="Подробнее"/>
+              <StackPanel Margin="20,4,0,0"
+                          Visibility="{Binding IsChecked, ElementName=TglMepReport, Converter={StaticResource BoolVis}}">
+                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8"
+                           Text="Что это. Серое окно-терминал с подробным логом передачи: источники, приёмники, заполненные элементы, конфликты и элементы без источника."/>
+                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8"
+                           Text="Когда включать. Первая проверка модели или разбор конкретных Id элементов из конфликта."/>
+                <TextBlock Style="{StaticResource Caption}"
+                           Text="Когда выключать. Рутинный повторный запуск, если хватает краткой сводки."/>
+              </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- ============================================================
+               Раздел «Экспорт и импорт»
+               ============================================================ -->
+          <ScrollViewer x:Name="SecBackup" VerticalScrollBarVisibility="Auto" Padding="18,16,14,16"
+                        Visibility="{Binding IsBackup, Converter={StaticResource BoolVis}}">
+            <StackPanel>
+              <TextBlock Style="{StaticResource FieldLabel}" Text="РЕЗЕРВНАЯ КОПИЯ НАСТРОЕК"/>
+              <TextBlock Style="{StaticResource Body}" Margin="0,0,0,8"
+                         Text="Экспорт сохраняет все настройки PP Tools в файл .json — на диск, на сервер, куда угодно. Пригодится при переустановке или сбое."/>
+              <TextBlock Style="{StaticResource Body}"
+                         Text="Импорт восстанавливает настройки из ранее сохранённого файла. Текущие значения будут заменены, поэтому окно закроется без сохранения — откройте настройки заново."/>
+
+              <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                <Button x:Name="BtnExport" Content="Экспортировать в файл" Style="{StaticResource Button.Flat}"
+                        MinWidth="0" Margin="0,0,8,0"/>
+                <Button x:Name="BtnImport" Content="Импортировать из файла" Style="{StaticResource Button.Flat}"
+                        MinWidth="0"/>
+              </StackPanel>
+
+              <Border Style="{StaticResource Rule}" Margin="0,18,0,18"/>
+
+              <TextBlock Style="{StaticResource FieldLabel}" Text="ФАЙЛ НАСТРОЕК"/>
+              <TextBlock Style="{StaticResource Body}" Text="{Binding SettingsPath}"/>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0"
+                         Text="Экспортируется то, что уже записано на диск. Если только что меняли значения — сначала «Сохранить», потом экспорт."/>
+            </StackPanel>
+          </ScrollViewer>
+
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="2" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="3" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtStatus" Grid.Column="0"
+                 Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}"
+                 Text="{Binding Status}"
+                 Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnCancel" Content="Отмена" Style="{StaticResource Button.Flat}" Margin="0,0,8,0"/>
+        <Button x:Name="BtnSave" Content="Сохранить" Style="{StaticResource Button.Primary}"
+                IsEnabled="{Binding IsValid}"/>
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Window>
