@@ -29,8 +29,12 @@ from Autodesk.Revit.DB import (
     Level, FamilySymbol, BuiltInParameter
 )
 
-from pyrevit import forms
 from pyrevit import script
+
+import sys
+
+import pp_param_picker
+import pp_wpf
 
 
 doc = __revit__.ActiveUIDocument.Document
@@ -38,6 +42,12 @@ uidoc = __revit__.ActiveUIDocument
 view = doc.ActiveView
 
 TITLE = u"Марки помещений Номер"
+
+
+def fail(message, title):
+    u"""Показать окно ошибки и выйти (скрипт без общего try — грабля 13 UI.md)."""
+    pp_wpf.show_report(message, title=title, subtitle=TITLE, is_error=True)
+    sys.exit(0)
 WANTED_NAME = u"Номер"
 
 cfg = script.get_config()
@@ -55,11 +65,10 @@ except Exception:
     gen_level = None
 
 if gen_level is None:
-    forms.alert(
+    fail(
         u"Активный вид не является планом с уровнем.\n\n"
         u"Откройте план этажа и повторите.",
-        title=TITLE)
-    script.exit()
+        u"Неподходящий вид")
 
 
 # ── Тип марки «Номер» ────────────────────────────────────────────────────────
@@ -83,11 +92,10 @@ _room_tag_syms = list(
     .OfClass(FamilySymbol).ToElements())
 
 if not _room_tag_syms:
-    forms.alert(
+    fail(
         u"В проекте не загружено ни одного типа марки помещений.\n\n"
         u"Загрузите семейство марки помещений и повторите.",
-        title=TITLE)
-    script.exit()
+        u"Нет типов марок")
 
 _by_name = {}
 for s in _room_tag_syms:
@@ -117,14 +125,14 @@ if tag_sym is None:
 # 4) спросить у пользователя и запомнить
 if tag_sym is None:
     _names = sorted([n for n in _by_name.keys() if n])
-    chosen = forms.SelectFromList.show(
+    chosen = pp_param_picker.ask(
         _names,
-        title=u"Тип марки с именем «Номер» не найден — выберите тип",
-        button_name=u"Применить",
-        multiselect=False)
+        title=u"Тип марки «Номер» не найден — выберите тип",
+        subtitle=TITLE,
+        empty_text=u"В проекте нет ни одного типа марки помещений")
 
     if not chosen:
-        script.exit()
+        sys.exit(0)
 
     tag_sym = _by_name.get(chosen)
     try:
@@ -134,8 +142,7 @@ if tag_sym is None:
         pass
 
 if tag_sym is None:
-    forms.alert(u"Не удалось определить тип марки.", title=TITLE)
-    script.exit()
+    fail(u"Не удалось определить тип марки.", u"Тип марки не выбран")
 
 tag_type_name = _sym_name(tag_sym)
 tag_type_id = tag_sym.Id
@@ -352,8 +359,7 @@ try:
 except Exception as ex:
     if t.HasStarted() and not t.HasEnded():
         t.RollBack()
-    forms.alert(u"Ошибка выполнения:\n{}".format(unicode(ex)), title=TITLE)
-    script.exit()
+    fail(unicode(ex), u"Ошибка выполнения")
 
 
 # ── Отчёт ────────────────────────────────────────────────────────────────────
@@ -383,4 +389,4 @@ if errors:
     for msg in errors[:10]:
         lines.append(u"  • {}".format(msg))
 
-forms.alert(u"\n".join(lines), title=TITLE)
+pp_wpf.show_report(u"\n".join(lines), title=u"Готово", subtitle=TITLE)

@@ -25,7 +25,9 @@ from Autodesk.Revit.DB import (
 )
 from Autodesk.Revit.Exceptions import OperationCanceledException
 
-from pyrevit import forms
+import sys
+
+import pp_wpf
 
 
 doc = __revit__.ActiveUIDocument.Document
@@ -33,6 +35,12 @@ uidoc = __revit__.ActiveUIDocument
 view = doc.ActiveView
 
 TITLE = u"Марки помещений из связи"
+
+
+def fail(message, title):
+    u"""Показать окно ошибки и выйти (скрипт без общего try — грабля 13 UI.md)."""
+    pp_wpf.show_report(message, title=title, subtitle=TITLE, is_error=True)
+    sys.exit(0)
 
 # допуск по высоте под/над уровнем (в футах): ~1 м вниз, чтобы поймать
 # точку помещения, лежащую чуть ниже уровня
@@ -48,13 +56,11 @@ except Exception:
     gen_level = None
 
 if gen_level is None:
-    forms.alert(
+    fail(
         u"Активный вид не является планом с уровнем.\n\n"
         u"Откройте план этажа и повторите — инструмент ставит марки на\n"
         u"помещения, видимые на текущем плане.",
-        title=TITLE)
-    import sys
-    sys.exit()
+        u"Неподходящий вид")
 
 
 # ── Диапазон высот уровня вида ───────────────────────────────────────────────
@@ -123,12 +129,10 @@ _room_tag_syms = list(
     .OfClass(FamilySymbol).ToElements())
 
 if not _room_tag_syms:
-    forms.alert(
+    fail(
         u"В проекте не загружено ни одного типа марки помещений.\n\n"
         u"Загрузите семейство марки помещений и повторите.",
-        title=TITLE)
-    import sys
-    sys.exit()
+        u"Нет типов марок")
 
 tag_sym = None
 
@@ -165,11 +169,9 @@ for li in FilteredElementCollector(doc).OfClass(RevitLinkInstance).ToElements():
         pass
 
 if not links:
-    forms.alert(
+    fail(
         u"На активном виде нет загруженных и видимых RVT-связей.",
-        title=TITLE)
-    import sys
-    sys.exit()
+        u"Нет связей на виде")
 
 
 # ── Уже поставленные марки помещений (для пропуска) ──────────────────────────
@@ -316,9 +318,7 @@ try:
 except Exception as ex:
     if t.HasStarted() and not t.HasEnded():
         t.RollBack()
-    forms.alert(u"Ошибка выполнения:\n{}".format(unicode(ex)), title=TITLE)
-    import sys
-    sys.exit()
+    fail(unicode(ex), u"Ошибка выполнения")
 
 
 # ── Отчёт ────────────────────────────────────────────────────────────────────
@@ -343,4 +343,4 @@ if errors:
     for msg in errors[:10]:
         lines.append(u"  • {}".format(msg))
 
-forms.alert(u"\n".join(lines), title=TITLE)
+pp_wpf.show_report(u"\n".join(lines), title=u"Готово", subtitle=TITLE)
