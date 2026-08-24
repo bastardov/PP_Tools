@@ -42,6 +42,8 @@ from Autodesk.Revit.DB import (
 
 from pyrevit import forms, script
 
+import pp_wpf
+
 from pp_settings import get_extension_root
 
 
@@ -96,6 +98,19 @@ def set_param(el, name, value):
 
 # ─── ГЛАВНЫЙ ЗАПУСК ──────────────────────────────────────────
 
+TOOL_TITLE = u"Загрузить"
+
+
+class Stop(Exception):
+    pass
+
+
+def fail(message, title):
+    u"""Показать окно ошибки и прервать сценарий."""
+    pp_wpf.show_report(message, title=title, subtitle=TOOL_TITLE, is_error=True)
+    raise Stop()
+
+
 try:
     data_dir = os.path.join(get_extension_root(), u"AI_обмен")
     cmd_path = os.path.join(data_dir, u"commands.json")
@@ -116,8 +131,7 @@ try:
         commands = payload.get("commands", [])
 
     if not commands:
-        forms.alert(u"В файле нет команд (commands).", title=u"Загрузить")
-        script.exit()
+        fail(u"В файле нет команд (commands).", u"Файл пуст")
 
     log            = []
     applied_params = 0
@@ -189,11 +203,23 @@ try:
         except:
             pass
 
-    forms.alert(message, title=u"Загрузить")
+    pp_wpf.show_report(
+        message,
+        title=u"Команды применены",
+        subtitle=TOOL_TITLE
+    )
+
+except Stop:
+    pass
 
 except Exception as ex:
     try:
         t.RollBack()
     except:
         pass
-    forms.alert(u"Ошибка загрузки:\n\n{}".format(unicode(ex)), title=u"Загрузить")
+    pp_wpf.show_report(
+        unicode(ex),
+        title=u"Ошибка загрузки",
+        subtitle=TOOL_TITLE,
+        is_error=True
+    )

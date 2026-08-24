@@ -38,7 +38,7 @@ from Autodesk.Revit.DB import (
     XYZ,
 )
 
-from pyrevit import forms, script
+import pp_wpf
 
 from pp_settings import get_extension_root
 
@@ -369,17 +369,21 @@ def collect_floors():
 
 # ─── ГЛАВНЫЙ ЗАПУСК ──────────────────────────────────────────
 
+TOOL_TITLE = u"Выгрузить"
+
+
 try:
     # Предупреждение, если отключён расчёт объёмов (пространства могут быть
     # без площади/геометрии).
     try:
         avs = AreaVolumeSettings.GetAreaVolumeSettings(doc)
         if not avs.ComputeVolumes:
-            forms.alert(
+            pp_wpf.show_report(
                 u"В проекте ОТКЛЮЧЁН расчёт объёмов.\n\n"
                 u"Пространства могут выгрузиться без корректной площади и контура.\n"
                 u"Рекомендуется включить расчёт объёмов и выгрузить заново.",
-                title=u"Выгрузить"
+                title=u"Расчёт объёмов отключён",
+                subtitle=TOOL_TITLE
             )
     except:
         pass
@@ -429,7 +433,6 @@ try:
         json.dump(data, fh, ensure_ascii=False, indent=1)
 
     message = (
-        u"Модель выгружена.\n\n"
         u"Пространства: {}\n"
         u"Стены:        {}\n"
         u"Окна/двери:   {}\n"
@@ -437,7 +440,16 @@ try:
         u"Файл:\n{}"
     ).format(len(spaces), len(walls), len(openings), len(floors), out_path)
 
-    forms.alert(message, title=u"Выгрузить")
+    pp_wpf.show_report(
+        message,
+        title=u"Модель выгружена",
+        subtitle=TOOL_TITLE
+    )
 
 except Exception as ex:
-    forms.alert(u"Ошибка выгрузки:\n\n{}".format(unicode(ex)), title=u"Выгрузить")
+    pp_wpf.show_report(
+        unicode(ex),
+        title=u"Ошибка выгрузки",
+        subtitle=TOOL_TITLE,
+        is_error=True
+    )
