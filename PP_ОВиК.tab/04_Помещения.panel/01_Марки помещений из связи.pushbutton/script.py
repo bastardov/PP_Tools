@@ -134,20 +134,36 @@ if not _room_tag_syms:
         u"Загрузите семейство марки помещений и повторите.",
         u"Нет типов марок")
 
+WANTED_NAME = u"Номер Имя"
+
+_by_name = {}
+for _s in _room_tag_syms:
+    _by_name[_sym_name(_s).strip()] = _s
+
 tag_sym = None
 
-# 1) тип по умолчанию для категории
-try:
-    _def_id = doc.GetDefaultFamilyTypeId(
-        ElementId(BuiltInCategory.OST_RoomTags))
-    if _def_id and _def_id != ElementId.InvalidElementId:
-        _cand = doc.GetElement(_def_id)
-        if isinstance(_cand, FamilySymbol):
-            tag_sym = _cand
-except Exception:
-    tag_sym = None
+# 1) тип с именем «Номер Имя» (к нему приводим весь план)
+tag_sym = _by_name.get(WANTED_NAME)
 
-# 2) иначе — первый загруженный
+if tag_sym is None:
+    for _nm, _s in _by_name.items():
+        if _nm.lower() == WANTED_NAME.lower():
+            tag_sym = _s
+            break
+
+# 2) тип по умолчанию для категории
+if tag_sym is None:
+    try:
+        _def_id = doc.GetDefaultFamilyTypeId(
+            ElementId(BuiltInCategory.OST_RoomTags))
+        if _def_id and _def_id != ElementId.InvalidElementId:
+            _cand = doc.GetElement(_def_id)
+            if isinstance(_cand, FamilySymbol):
+                tag_sym = _cand
+    except Exception:
+        tag_sym = None
+
+# 3) иначе — первый загруженный
 if tag_sym is None:
     tag_sym = sorted(_room_tag_syms, key=lambda s: _sym_name(s))[0]
 
@@ -260,7 +276,11 @@ for tag in _room_tags_on_view:
 placed = 0
 skipped_existing = 0
 skipped_offview = 0
+retyped = 0
+already_ok = 0
 errors = []
+
+_tag_type_id = tag_sym.Id
 
 t = Transaction(doc, u"PP: Марки помещений из связи")
 t.Start()
@@ -269,6 +289,20 @@ try:
         tag_sym.Activate()
         doc.Regenerate()
 
+    # 1) существующие марки приводим к одному типу «Номер Имя»
+    # (на плане встречаются марки только с номером или только с именем)
+    for _tg in _room_tags_on_view:
+        try:
+            if _tg.GetTypeId() == _tag_type_id:
+                already_ok += 1
+                continue
+            _tg.ChangeTypeId(_tag_type_id)
+            retyped += 1
+        except Exception as ex:
+            errors.append(u"марка {}: {}".format(
+                _tg.Id.IntegerValue, unicode(ex)))
+
+    # 2) непомеченные помещения связи маркируем этим же типом
     for li in links:
         ldoc = li.GetLinkDocument()
         transform = li.GetTotalTransform()
@@ -324,7 +358,10 @@ except Exception as ex:
 # ── Отчёт ────────────────────────────────────────────────────────────────────
 
 lines = [u"Поставлено марок: {}".format(placed),
+         u"Перетипизировано марок: {}".format(retyped),
          u"Тип марки: {}".format(tag_type_name)]
+if already_ok:
+    lines.append(u"Уже были нужного типа: {}".format(already_ok))
 if skipped_existing:
     lines.append(u"Пропущено (уже помечены): {}".format(skipped_existing))
 
@@ -333,7 +370,7 @@ lines.append(u"Марок на виде было: {}".format(len(_room_tags_on_v
 if _unresolved_tags:
     lines.append(
         u"из них не удалось связать с помещением: {}".format(_unresolved_tags))
-if placed == 0 and skipped_existing == 0:
+if placed == 0 and skipped_existing == 0 and retyped == 0 and already_ok == 0:
     lines.append(u"")
     lines.append(u"На этом виде не нашлось помещений связи для маркировки.")
     lines.append(u"Проверьте уровень плана и область подрезки.")
