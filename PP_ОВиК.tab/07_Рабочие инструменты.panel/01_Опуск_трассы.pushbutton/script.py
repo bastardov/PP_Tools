@@ -72,29 +72,59 @@ my_config = script.get_config()
 
 
 def load_settings():
+    u"""Запомненные параметры окна. Уровень храним по имени: id в другой модели чужой."""
+    saved = {}
+
     try:
-        direction = my_config.get_option("direction", u"Опуск")
+        saved[u"mode"] = my_config.get_option("direction", u"Опуск")
     except:
-        direction = u"Опуск"
+        saved[u"mode"] = u"Опуск"
 
     try:
-        angle = float(my_config.get_option("angle", 90.0))
+        saved[u"angle"] = float(my_config.get_option("angle", 90.0))
     except:
-        angle = 90.0
+        saved[u"angle"] = 90.0
 
     try:
-        value_mm = float(my_config.get_option("value_mm", 500.0))
+        saved[u"value_mm"] = float(my_config.get_option("value_mm", 500.0))
     except:
-        value_mm = 500.0
+        saved[u"value_mm"] = 500.0
 
-    return direction, angle, value_mm
-
-
-def save_settings(direction, angle, value_mm):
     try:
-        my_config.direction = direction
-        my_config.angle = angle
-        my_config.value_mm = value_mm
+        saved[u"level_key"] = my_config.get_option("level_key", None)
+    except:
+        saved[u"level_key"] = None
+
+    try:
+        saved[u"ref_kind"] = my_config.get_option("ref_kind", u"низ")
+    except:
+        saved[u"ref_kind"] = u"низ"
+
+    try:
+        elev = my_config.get_option("elev_mm", None)
+        saved[u"elev_mm"] = None if elev is None else float(elev)
+    except:
+        saved[u"elev_mm"] = None
+
+    return saved
+
+
+def save_settings(result):
+    try:
+        my_config.direction = result[u"mode"]
+        my_config.angle = result[u"angle"]
+
+        if result[u"value_mm"] is not None:
+            my_config.value_mm = result[u"value_mm"]
+
+        if result[u"level_key"] is not None:
+            my_config.level_key = result[u"level_key"]
+
+        my_config.ref_kind = result[u"ref_kind"]
+
+        if result[u"elev_mm"] is not None:
+            my_config.elev_mm = result[u"elev_mm"]
+
         script.save_config()
     except:
         pass
@@ -161,22 +191,126 @@ def pick_point_on_element(element_id, message):
         return None
 
 
-def ask_move_settings():
-    u"""Показывает WPF-окно параметров. Возврат: (направление, мм, угол) или (None, None, None)."""
-    saved_direction, saved_angle, saved_value = load_settings()
+def format_elev_m(value_mm):
+    u"""2750 -> «+2.750», -150 -> «-0.150», 0 -> «±0.000»."""
+    try:
+        value = float(value_mm)
+    except:
+        return u""
 
-    result = pp_drop_window.ask_settings(saved_direction, saved_angle, saved_value)
+    if abs(value) < 0.5:
+        return u"±0.000"
+
+    sign = u"+" if value > 0 else u"-"
+
+    return u"{}{:.3f}".format(sign, abs(value) / 1000.0)
+
+
+def collect_levels():
+    u"""Уровни модели снизу вверх. Отметка — та же система координат, что и Z элементов."""
+    levels = []
+
+    collector = FilteredElementCollector(doc)\
+        .OfClass(Level)\
+        .WhereElementIsNotElementType()
+
+    for lv in collector:
+        try:
+            elev_ft = lv.Elevation
+            name = lv.Name
+        except:
+            continue
+
+        levels.append({
+            u"id": lv.Id.IntegerValue,
+            u"key": name,
+            u"elev_ft": elev_ft,
+            u"elev_mm": elev_ft / MM_TO_FT,
+        })
+
+    levels.sort(key=lambda item: item[u"elev_ft"])
+
+    for level in levels:
+        level[u"label"] = u"{}    {}".format(
+            level[u"key"],
+            format_elev_m(level[u"elev_mm"])
+        )
+
+    return levels
+
+
+def ask_move_settings():
+    u"""Показывает WPF-окно параметров. Возврат: словарь параметров или None."""
+    saved = load_settings()
+
+    levels = collect_levels()
+
+    result = pp_drop_window.ask_settings(
+        saved[u"mode"],
+        saved[u"angle"],
+        saved[u"value_mm"],
+        levels,
+        saved[u"level_key"],
+        saved[u"ref_kind"],
+        saved[u"elev_mm"]
+    )
 
     if result is None:
-        return None, None, None
+        return None
 
-    direction = result[u"direction"]
-    value_mm = result[u"value_mm"]
-    angle = result[u"angle"]
+    save_settings(result)
 
-    save_settings(direction, angle, value_mm)
+    result[u"levels"] = levels
 
-    return direction, value_mm, angle
+    return result
+
+
+def half_size_ft(el, point):
+    u"""Половина высоты сечения у ближайшего к точке коннектора (без изоляции).
+
+    None — размер определить не удалось; вызывающий код должен об этом сказать.
+    """
+    conn = nearest_connector(el, point)
+
+    if conn is not None:
+        try:
+            if conn.Shape == ConnectorProfileType.Round:
+                return conn.Radius
+        except:
+            pass
+
+        try:
+            height = conn.Height
+
+            if height and height > 0:
+                return height / 2.0
+        except:
+            pass
+
+    # Запасной путь: габаритные параметры самого элемента
+    for name in ("RBS_CURVE_HEIGHT_PARAM",
+                 "RBS_CURVE_DIAMETER_PARAM",
+                 "RBS_PIPE_OUTER_DIAMETER",
+                 "RBS_PIPE_DIAMETER_PARAM"):
+        bip = getattr(BuiltInParameter, name, None)
+
+        if bip is None:
+            continue
+
+        try:
+            param = el.get_Parameter(bip)
+
+            if param is None or not param.HasValue:
+                continue
+
+            value = param.AsDouble()
+
+            if value and value > 0:
+                return value / 2.0
+        except:
+            pass
+
+    return None
 
 
 def xyz_add(a, b):
@@ -691,22 +825,41 @@ def restore_external_connections(connection_data, new_elements):
 
 
 try:
-    direction, move_mm, angle_deg = ask_move_settings()
+    settings = ask_move_settings()
 
-    if direction is None:
+    if settings is None:
         raise OperationCanceledException()
 
-    if move_mm <= 0:
-        fail(
-            u"Значение должно быть больше 0 мм."
-        )
+    mode = settings[u"mode"]
+    angle_deg = settings[u"angle"]
 
-    move_ft = move_mm * MM_TO_FT
+    by_level = (mode == u"Отметка")
 
-    if direction == u"Опуск":
-        move_vec = XYZ(0, 0, -move_ft)
+    # Предупреждения, накопленные до старта транзакции
+    pre_warnings = []
+
+    if by_level:
+        # Величину и направление посчитаем после выбора участка:
+        # они зависят от текущей отметки и габарита сечения.
+        direction = None
+        move_mm = None
+        move_ft = None
+        move_vec = None
     else:
-        move_vec = XYZ(0, 0, move_ft)
+        direction = mode
+        move_mm = settings[u"value_mm"]
+
+        if move_mm is None or move_mm <= 0:
+            fail(
+                u"Значение должно быть больше 0 мм."
+            )
+
+        move_ft = move_mm * MM_TO_FT
+
+        if direction == u"Опуск":
+            move_vec = XYZ(0, 0, -move_ft)
+        else:
+            move_vec = XYZ(0, 0, move_ft)
 
     ref = uidoc.Selection.PickObject(
         ObjectType.Element,
@@ -790,6 +943,75 @@ try:
     move_after_split = t_dir >= t_split
     source_id = mep.Id.IntegerValue
 
+    # --- режим «По отметке»: считаем смещение от текущей отметки ---
+    if by_level:
+        level_key = settings[u"level_key"]
+        level = None
+
+        for item in settings[u"levels"]:
+            if item[u"key"] == level_key:
+                level = item
+                break
+
+        if level is None:
+            fail(
+                u"Уровень «{}» в модели не найден.".format(level_key)
+            )
+
+        elev_mm = settings[u"elev_mm"]
+
+        if elev_mm is None:
+            fail(
+                u"Не задана отметка от уровня."
+            )
+
+        ref_kind = settings[u"ref_kind"]
+
+        half_ft = half_size_ft(mep, split)
+
+        if half_ft is None:
+            if ref_kind == u"середина":
+                half_ft = 0.0
+            else:
+                fail(
+                    u"Не удалось определить высоту сечения участка.\n\n"
+                    u"Задайте отметку середины (оси) — она не зависит от габарита."
+                )
+
+        # Отметка задана для низа или верха — ось смещена на половину сечения
+        if ref_kind == u"низ":
+            axis_offset_ft = half_ft
+        elif ref_kind == u"верх":
+            axis_offset_ft = -half_ft
+        else:
+            axis_offset_ft = 0.0
+
+        target_axis_z = level[u"elev_ft"] + elev_mm * MM_TO_FT + axis_offset_ft
+
+        # Отметку меряем в точке разрыва: на наклонной трассе одного числа нет
+        if abs(start.Z - end.Z) > 0.5 * MM_TO_FT:
+            pre_warnings.append(
+                u"Участок наклонный: отметка выдержана в точке разрыва, "
+                u"уклон перемещённой части сохранён."
+            )
+
+        move_ft_signed = target_axis_z - split.Z
+
+        if abs(move_ft_signed) < 0.5 * MM_TO_FT:
+            fail(
+                u"Участок уже на этой отметке.\n\n"
+                u"Текущая отметка {}: {} мм от «{}».".format(
+                    ref_kind,
+                    fmt(round((split.Z - axis_offset_ft - level[u"elev_ft"]) / MM_TO_FT, 1)),
+                    level[u"key"]
+                )
+            )
+
+        direction = u"Опуск" if move_ft_signed < 0 else u"Подъем"
+        move_ft = abs(move_ft_signed)
+        move_mm = move_ft / MM_TO_FT
+        move_vec = XYZ(0, 0, move_ft_signed)
+
     if angle_deg >= 89.9:
         horizontal_offset_ft = 0.0
     else:
@@ -866,7 +1088,7 @@ try:
         MAX_CHAIN_DEPTH
     )
 
-    warnings = []
+    warnings = list(pre_warnings)
 
     t = Transaction(doc, u"PP: Опуск / Подъем трассы")
     t.Start()
@@ -948,8 +1170,18 @@ try:
 
     t.Commit()
 
-    msg = u"Величина: {} мм\nУгол: {}°\nГоризонтальный отступ: {} мм\nСоздано новых участков: {}\nПеремещено связанных элементов: {}\nВосстановлено подключений: {}".format(
-        fmt(move_mm),
+    msg = u""
+
+    if by_level:
+        msg += u"Отметка {}: {} мм от «{}»\nНаправление: {}\n".format(
+            settings[u"ref_kind"],
+            fmt(settings[u"elev_mm"]),
+            level[u"key"],
+            direction.lower()
+        )
+
+    msg += u"Величина: {} мм\nУгол: {}°\nГоризонтальный отступ: {} мм\nСоздано новых участков: {}\nПеремещено связанных элементов: {}\nВосстановлено подключений: {}".format(
+        fmt(round(move_mm, 1)),
         fmt(angle_deg),
         fmt(round(horizontal_offset_mm, 1)),
         len(new_elements),
@@ -964,7 +1196,7 @@ try:
 
     pp_wpf.show_report(
         msg,
-        title=u"{} на {} мм".format(done_verb, fmt(move_mm)),
+        title=u"{} на {} мм".format(done_verb, fmt(round(move_mm, 1))),
         subtitle=TITLE
     )
 

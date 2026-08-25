@@ -22,9 +22,10 @@
       <RowDefinition Height="Auto"/>   <!-- заголовок -->
       <RowDefinition Height="Auto"/>   <!-- описание -->
       <RowDefinition Height="Auto"/>   <!-- схема -->
-      <RowDefinition Height="Auto"/>   <!-- направление -->
+      <RowDefinition Height="Auto"/>   <!-- режим -->
       <RowDefinition Height="Auto"/>   <!-- угол -->
       <RowDefinition Height="Auto"/>   <!-- величина -->
+      <RowDefinition Height="Auto"/>   <!-- отметка от уровня -->
       <RowDefinition Height="*"/>      <!-- растяжка -->
       <RowDefinition Height="Auto"/>   <!-- разделитель -->
       <RowDefinition Height="Auto"/>   <!-- подвал -->
@@ -62,19 +63,35 @@
           <TextBlock Canvas.Left="132" Canvas.Top="50" Style="{StaticResource Caption}" Text="точка разрыва"/>
         </Canvas>
 
+        <!-- По отметке: направление определится само, по разнице отметок -->
+        <Canvas x:Name="DiagramLevel" Width="300" Height="62"
+                Visibility="{Binding IsByLevel, Converter={StaticResource BoolVis}}">
+          <TextBlock Canvas.Left="10" Canvas.Top="0" Style="{StaticResource Caption}" Text="уровень"/>
+          <Path Data="M 10,20 L 290,20" Stroke="{StaticResource Muted}" StrokeThickness="1"
+                StrokeDashArray="4 3"/>
+          <Path Data="M 10,52 L 120,52" Stroke="{StaticResource Accent}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+          <Path Data="M 120,52 L 175,36" Stroke="{StaticResource Accent}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+          <Path Data="M 175,36 L 290,36" Stroke="{StaticResource Accent}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+          <Path Data="M 232,20 L 232,36" Stroke="{StaticResource Hot}" StrokeThickness="1.5"/>
+          <TextBlock Canvas.Left="238" Canvas.Top="18" Style="{StaticResource Caption}" Text="отметка"/>
+        </Canvas>
+
       </Grid>
     </Border>
 
-    <!-- ===== Направление ===== -->
+    <!-- ===== Режим ===== -->
     <StackPanel Grid.Row="3" Margin="0,14,0,0">
-      <TextBlock Style="{StaticResource FieldLabel}" Text="НАПРАВЛЕНИЕ"/>
+      <TextBlock Style="{StaticResource FieldLabel}" Text="РЕЖИМ"/>
       <WrapPanel>
         <RadioButton x:Name="ChipDown" Style="{StaticResource RadioButton.Chip}"
                      GroupName="Direction" Content="Опуск" MinWidth="88"
-                     ToolTip="Часть трассы уходит ниже исходной отметки"/>
+                     ToolTip="Часть трассы уходит ниже исходной отметки на заданную величину"/>
         <RadioButton x:Name="ChipUp" Style="{StaticResource RadioButton.Chip}"
                      GroupName="Direction" Content="Подъем" MinWidth="88"
-                     ToolTip="Часть трассы уходит выше исходной отметки"/>
+                     ToolTip="Часть трассы уходит выше исходной отметки на заданную величину"/>
+        <RadioButton x:Name="ChipLevel" Style="{StaticResource RadioButton.Chip}"
+                     GroupName="Direction" Content="По отметке" MinWidth="108"
+                     ToolTip="Часть трассы встаёт на заданную отметку от выбранного уровня. Опуск это или подъем, инструмент решит сам"/>
       </WrapPanel>
     </StackPanel>
 
@@ -96,11 +113,13 @@
       </WrapPanel>
     </StackPanel>
 
-    <!-- ===== Величина ===== -->
-    <StackPanel Grid.Row="5" Margin="0,14,0,0">
+    <!-- ===== Величина (Опуск / Подъем) ===== -->
+    <StackPanel Grid.Row="5" Margin="0,14,0,0"
+                Visibility="{Binding IsByOffset, Converter={StaticResource BoolVis}}">
       <TextBlock Style="{StaticResource FieldLabel}" Text="ВЕЛИЧИНА ПО ВЫСОТЕ"/>
       <StackPanel Orientation="Horizontal">
         <TextBox x:Name="TxtValue" Style="{StaticResource TextBox.Field}" Width="120"
+                 Tag="напр. 500"
                  ToolTip="Смещение по вертикали в миллиметрах"/>
         <TextBlock Style="{StaticResource Caption}" Text="мм" Margin="8,0,0,0" VerticalAlignment="Center"/>
       </StackPanel>
@@ -108,10 +127,55 @@
                  Text="{Binding Hint}"/>
     </StackPanel>
 
-    <!-- ===== Подвал ===== -->
-    <Border Grid.Row="7" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+    <!-- ===== Отметка от уровня ===== -->
+    <StackPanel Grid.Row="6" Margin="0,14,0,0"
+                Visibility="{Binding IsByLevel, Converter={StaticResource BoolVis}}">
 
-    <Grid Grid.Row="8" Margin="0,12,0,0">
+      <TextBlock Style="{StaticResource FieldLabel}" Text="УРОВЕНЬ"/>
+      <ComboBox x:Name="CmbLevel" Style="{StaticResource PP.ComboBox}" Margin="0,6,0,0"
+                ToolTip="Уровень модели, от которого отсчитывается отметка"/>
+
+      <TextBlock Style="{StaticResource FieldLabel}" Text="ОТМЕТКА ОТ УРОВНЯ, ММ" Margin="0,14,0,0"/>
+      <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0"
+                 Text="Заполните одно поле — два других очистятся. Ниже уровня — со знаком минус."/>
+
+      <Grid Margin="0,6,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0" Margin="0,0,4,0">
+          <TextBlock Style="{StaticResource Caption}" Text="низ"/>
+          <TextBox x:Name="TxtElevBottom" Style="{StaticResource TextBox.Field}" Margin="0,3,0,0"
+                   Tag="напр. 2750"
+                   ToolTip="Отметка низа воздуховода или трубы (без изоляции)"/>
+        </StackPanel>
+
+        <StackPanel Grid.Column="1" Margin="4,0,4,0">
+          <TextBlock Style="{StaticResource Caption}" Text="середина (ось)"/>
+          <TextBox x:Name="TxtElevMiddle" Style="{StaticResource TextBox.Field}" Margin="0,3,0,0"
+                   Tag="напр. 2850"
+                   ToolTip="Отметка оси воздуховода или трубы"/>
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Margin="4,0,0,0">
+          <TextBlock Style="{StaticResource Caption}" Text="верх"/>
+          <TextBox x:Name="TxtElevTop" Style="{StaticResource TextBox.Field}" Margin="0,3,0,0"
+                   Tag="напр. 2950"
+                   ToolTip="Отметка верха воздуховода или трубы (без изоляции)"/>
+        </StackPanel>
+      </Grid>
+
+      <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0"
+                 Text="{Binding LevelHint}" TextWrapping="Wrap"/>
+    </StackPanel>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="8" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="9" Margin="0,12,0,0">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/>
         <ColumnDefinition Width="Auto"/>
