@@ -1,0 +1,74 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Выбор листов"
+        Width="640"
+        Height="720"
+        MinWidth="520"
+        MinHeight="480"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0">
+      <TextBlock x:Name="TxtPickerTitle" Style="{StaticResource H1}"/>
+      <TextBlock x:Name="TxtPickerSubtitle" Style="{StaticResource Subtitle}"
+                 Margin="0,2,0,0" TextWrapping="Wrap"/>
+    </StackPanel>
+
+    <StackPanel x:Name="PanelSection" Grid.Row="1" Margin="0,14,0,0">
+      <TextBlock x:Name="TxtSectionLabel" Style="{StaticResource FieldLabel}"
+                 Text="РАЗДЕЛ ПРОЕКТА"/>
+      <ComboBox x:Name="CmbSection" Style="{StaticResource PP.ComboBox}"
+                Margin="0,6,0,0"
+                ToolTip="Показывать в списке только листы выбранного раздела"/>
+      <TextBlock x:Name="TxtSectionHint" Style="{StaticResource Caption}"
+                 Margin="0,4,0,0" TextWrapping="Wrap"
+                 Text="Отметки не сбрасываются при смене раздела: можно набрать листы из нескольких разделов."/>
+    </StackPanel>
+
+    <ContentControl x:Name="ListHost" Grid.Row="2" Margin="0,14,0,0"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"/>
+
+    <TextBlock x:Name="TxtPickerStatus" Grid.Row="3" Style="{StaticResource Caption}"
+               Margin="0,6,0,0" TextWrapping="Wrap"/>
+
+    <Border Grid.Row="4" Style="{StaticResource Rule}" Margin="0,12,0,0"/>
+
+    <Grid Grid.Row="5" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtPickerFoot" Grid.Column="0" Style="{StaticResource Status}"
+                 Text="Поиск ищет по номеру и имени листа."
+                 VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnPickerCancel" Content="Отмена"
+                Style="{StaticResource Button.Flat}" Margin="0,0,8,0"/>
+        <Button x:Name="BtnPickerSelect" Content="Выбрать листы"
+                Style="{StaticResource Button.Primary}" IsEnabled="False"/>
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

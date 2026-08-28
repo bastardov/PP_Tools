@@ -10,7 +10,6 @@ clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 
 from Autodesk.Revit.DB import BuiltInParameter, Transaction, ViewSheet
-from pyrevit import forms
 from pp_settings import load_settings, DEFAULT_SETTINGS
 
 import os
@@ -23,6 +22,7 @@ if _HERE not in sys.path:
     sys.path.append(_HERE)
 
 import pp_wpf
+import pp_sheet_picker
 import pp_sheetname_plans_window
 
 
@@ -288,9 +288,12 @@ def show_review_dialog(rows_data):
 
 
 try:
-    sheets = forms.select_sheets(
+    sheets = pp_sheet_picker.ask(
+        doc,
         title=TOOL_TITLE,
-        button_name=u"Выбрать листы"
+        subtitle=u"Отберите листы по разделу проекта и отметьте те, "
+                 u"для которых нужно собрать имя по планам.",
+        button=u"Выбрать листы"
     )
 
     if not sheets:
