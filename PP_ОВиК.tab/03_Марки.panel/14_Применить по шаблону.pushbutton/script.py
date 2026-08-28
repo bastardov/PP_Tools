@@ -144,10 +144,11 @@ changed_by_size = 0
 already = 0
 no_text = 0
 processed = 0
+covered_by_rule = 0
 skipped_by_cat = 0
-skipped_no_rule = {}
 skipped_no_range = {}
 skipped_no_tag = {}
+uncovered_types = {}
 errors = []
 
 t = Transaction(doc, u"PP: Применить марки по шаблону")
@@ -189,6 +190,12 @@ try:
                 rule = tr.find_rule_for_element(rules, el)
 
             if rule is None:
+                key = u"{} / {} / {}".format(
+                    tr.display_name(cat_enum) or u"?",
+                    tr.get_family_name(el) or u"?",
+                    tr.get_type_name(el) or u"?")
+                uncovered_types[key] = uncovered_types.get(key, 0) + 1
+
                 if size_capable and length:
                     key = u"{} / {} / надпись {} знаков".format(
                         tr.display_name(cat_enum) or u"?",
@@ -196,19 +203,17 @@ try:
                     skipped_no_range[key] = skipped_no_range.get(key, 0) + 1
                 elif size_capable:
                     no_text += 1
-                else:
-                    key = u"{} / {} / {}".format(
-                        tr.display_name(cat_enum) or u"?",
-                        tr.get_family_name(el) or u"?",
-                        tr.get_type_name(el) or u"?")
-                    skipped_no_rule[key] = skipped_no_rule.get(key, 0) + 1
                 continue
+
+            covered_by_rule += 1
 
             sym = tr.resolve_tag_symbol(
                 doc, cat_enum, rule.get("tag_family"), rule.get("tag_type"))
             if sym is None:
-                key = u"{} / {}".format(
-                    rule.get("tag_family") or u"?", rule.get("tag_type") or u"?")
+                key = u"{} / {} / {}".format(
+                    tr.display_name(cat_enum) or u"?",
+                    rule.get("tag_family") or u"?",
+                    rule.get("tag_type") or u"?")
                 skipped_no_tag[key] = skipped_no_tag.get(key, 0) + 1
                 continue
 
@@ -263,6 +268,28 @@ if size_rules:
     lines.append(u"Пресет по размеру: «{}» (строк {})".format(
         size_active or u"—", len(size_rules)))
 
+coverage_percent = (100.0 * covered_by_rule / processed) if processed else 0.0
+coverage_text = u"{:.1f}".format(coverage_percent).replace(u".", u",")
+
+lines.append(u"")
+lines.append(u"Покрытие правилами:")
+lines.append(u"  Покрыто элементов: {} из {} ({}%)".format(
+    covered_by_rule, processed, coverage_text))
+
+if uncovered_types:
+    lines.append(u"  Семейства и типы без применимого правила:")
+    for k in sorted(uncovered_types.keys()):
+        lines.append(u"    • {}  (×{})".format(k, uncovered_types[k]))
+else:
+    lines.append(u"  Семейства и типы без применимого правила: нет")
+
+if skipped_no_tag:
+    lines.append(u"  Отсутствующие типы меток (не загружены в проект):")
+    for k in sorted(skipped_no_tag.keys()):
+        lines.append(u"    • {}  (×{})".format(k, skipped_no_tag[k]))
+else:
+    lines.append(u"  Отсутствующие типы меток: нет")
+
 if skipped_no_range:
     lines.append(u"")
     lines.append(u"Нет строки под такую длину надписи "
@@ -274,18 +301,6 @@ if no_text:
     lines.append(u"")
     lines.append(u"Надпись прочитать не удалось: {}. Обычно это пустая марка — "
                  u"параметр не заполнен.".format(no_text))
-
-if skipped_no_rule:
-    lines.append(u"")
-    lines.append(u"Нет правила (добавьте в «Инструменты меток»):")
-    for k in sorted(skipped_no_rule.keys()):
-        lines.append(u"  • {}  (×{})".format(k, skipped_no_rule[k]))
-
-if skipped_no_tag:
-    lines.append(u"")
-    lines.append(u"Тип марки не найден/не загружен в проект:")
-    for k in sorted(skipped_no_tag.keys()):
-        lines.append(u"  • {}  (×{})".format(k, skipped_no_tag[k]))
 
 if errors:
     lines.append(u"")
