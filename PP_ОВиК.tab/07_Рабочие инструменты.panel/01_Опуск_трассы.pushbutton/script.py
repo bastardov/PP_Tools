@@ -175,12 +175,6 @@ ALLOWED_MOVE_CATEGORIES = [
     int(BuiltInCategory.OST_FlexPipeCurves)
 ]
 
-# Только эти элементы между участками можно удалить и собрать стык заново
-FITTING_CATEGORIES = [
-    int(BuiltInCategory.OST_DuctFitting),
-    int(BuiltInCategory.OST_PipeFitting)
-]
-
 # Насколько ось примыкающего стояка должна быть вертикальной, чтобы он мог
 # «съесть» перепад высоты укорочением (1.0 = строго вертикально)
 VERTICAL_TOLERANCE = 0.999
@@ -862,150 +856,175 @@ def collect_connected_chain_from_start_ids(start_ids, blocked_ids, max_depth):
     return ids
 
 
-def find_absorbing_riser(mep, moved_endpoint, move_vec, source_id):
-    u"""Стояк, который «съест» перепад высоты укорочением, вместо переноса ветки.
+def is_vertical_curve(el):
+    u"""Прямой участок трассы, стоящий вертикально: такой может «съесть» перепад."""
+    if not is_curve_element(el):
+        return False
 
-    Опуск горизонтального участка не должен утаскивать вниз всю ветку: у
-    примыкающего вертикального участка достаточно сдвинуть верхний конец,
-    нижний остаётся на месте.
+    curve = get_curve(el)
 
-    Возврат: словарь с описанием правки или None, если перемещаемый конец
-    свободен и править нечего. Невозможные случаи — через Skip.
+    if curve is None or not isinstance(curve, Line):
+        return False
+
+    direction = normalize(xyz_sub(curve.GetEndPoint(1), curve.GetEndPoint(0)))
+
+    if direction is None:
+        return False
+
+    return abs(dot(direction, XYZ.BasisZ)) >= VERTICAL_TOLERANCE
+
+
+def collect_local_move_set(mep, moved_endpoint, blocked_ids, max_depth):
+    u"""Что уезжает вместе с участком и какие стояки съедят перепад.
+
+    Идём по цепочке от перемещаемого конца: отводы, переходы, горизонтальные
+    участки и всё, что на них сидит, едут вместе с трассой. Первый же
+    ВЕРТИКАЛЬНЫЙ участок дальше не пускаем: он останется на месте, а его
+    верхний конец сдвинется вслед за трассой. Всё, что за ним, не трогаем.
+
+    Возврат: (List[ElementId] для переноса, список примыкающих стояков).
     """
-    conn = nearest_connector(mep, moved_endpoint)
+    source_id = mep.Id.IntegerValue
 
-    if conn is None:
-        return None
+    move_ids = List[ElementId]()
+    absorbers = []
 
-    neighbour_ids = get_connected_owner_ids_from_connector(conn, source_id)
+    start_conn = nearest_connector(mep, moved_endpoint)
 
-    if not neighbour_ids:
-        return None
+    if start_conn is None:
+        return move_ids, absorbers
 
-    unique = {}
+    visited = set()
+    absorbed = set()
+    queue = []
 
-    for eid in neighbour_ids:
-        unique[eid.IntegerValue] = eid
+    try:
+        for ref in start_conn.AllRefs:
+            owner = ref.Owner
 
-    if len(unique) > 1:
-        raise Skip(
-            u"К перемещаемому концу подключено несколько элементов. "
-            u"Включите «Переносить всё, что дальше по трассе»."
-        )
+            if owner is not None and owner.Id.IntegerValue != source_id:
+                # from_id = None — стояк примыкает прямо к выбранному участку
+                queue.append((owner.Id, 0, start_conn.Origin, None))
+    except:
+        pass
 
-    neighbour = doc.GetElement(list(unique.values())[0])
+    while queue:
+        eid, depth, point, from_id = queue.pop(0)
 
-    if neighbour is None:
-        return None
+        key = eid.IntegerValue
 
-    fitting_id = None
+        if key in visited or key in absorbed or key in blocked_ids:
+            continue
 
-    if is_curve_element(neighbour):
-        riser = neighbour
-    else:
-        # Сквозь себя пропускаем только отвод: гибкую вставку или оборудование
-        # удалять нельзя
-        if get_category_id(neighbour) not in FITTING_CATEGORIES:
-            raise Skip(
-                u"К перемещаемому концу подключён не отвод, а {}. "
-                u"Включите «Переносить всё, что дальше по трассе».".format(
-                    element_label(neighbour)
-                )
-            )
+        el = doc.GetElement(eid)
 
-        # Между участками стоит отвод: смотрим сквозь него на следующий участок
-        fitting_id = neighbour.Id
+        if el is None or not is_allowed_to_move(el):
+            continue
 
-        behind = {}
+        if is_vertical_curve(el):
+            absorbed.add(key)
+            absorbers.append({
+                u"riser_id": eid,
+                u"point": point,
+                u"from_id": from_id,
+            })
+            continue
 
-        for c in get_connectors(neighbour):
+        visited.add(key)
+
+        if depth >= max_depth:
+            continue
+
+        for c in get_connectors(el):
             try:
+                origin = c.Origin
+
                 for ref in c.AllRefs:
                     owner = ref.Owner
 
                     if owner is None:
                         continue
 
-                    owner_int_id = owner.Id.IntegerValue
+                    owner_id = owner.Id.IntegerValue
 
-                    if owner_int_id in (source_id, neighbour.Id.IntegerValue):
+                    if owner_id in (key, source_id):
                         continue
 
-                    behind[owner_int_id] = owner
+                    if owner_id in visited or owner_id in absorbed:
+                        continue
+
+                    if owner_id in blocked_ids:
+                        continue
+
+                    queue.append((owner.Id, depth + 1, origin, key))
             except:
                 pass
 
-        if len(behind) != 1:
+    for key in visited:
+        move_ids.Add(ElementId(key))
+
+    return move_ids, absorbers
+
+
+def prepare_absorbers(absorbers, move_vec):
+    u"""Пересчитать стояки: дальний конец на месте, ближний уезжает с трассой."""
+    prepared = []
+
+    for item in absorbers:
+        riser = doc.GetElement(item[u"riser_id"])
+
+        if riser is None:
+            continue
+
+        curve = get_curve(riser)
+
+        if curve is None:
+            continue
+
+        p0 = curve.GetEndPoint(0)
+        p1 = curve.GetEndPoint(1)
+
+        point = item[u"point"]
+
+        if p0.DistanceTo(point) <= p1.DistanceTo(point):
+            near, far = p0, p1
+        else:
+            near, far = p1, p0
+
+        new_near = xyz_add(near, move_vec)
+
+        label = element_label(riser)
+
+        # Стык не должен перескочить через дальний конец стояка
+        old_dir = normalize(xyz_sub(near, far))
+        new_dir = normalize(xyz_sub(new_near, far))
+
+        if old_dir is None or new_dir is None or dot(old_dir, new_dir) < 0:
             raise Skip(
-                u"В месте примыкания не отвод, а узел с несколькими ветками. "
-                u"Включите «Переносить всё, что дальше по трассе»."
+                u"Смещение больше длины примыкающего стояка ({}).".format(label)
             )
 
-        riser = list(behind.values())[0]
+        new_length = far.DistanceTo(new_near)
 
-    if not is_curve_element(riser):
-        raise Skip(
-            u"К перемещаемому концу примыкает не участок трассы. "
-            u"Включите «Переносить всё, что дальше по трассе»."
-        )
-
-    riser_curve = get_curve(riser)
-
-    if riser_curve is None or not isinstance(riser_curve, Line):
-        raise Skip(u"Примыкающий участок не прямой — укоротить его нельзя.")
-
-    a = riser_curve.GetEndPoint(0)
-    b = riser_curve.GetEndPoint(1)
-
-    riser_dir = normalize(xyz_sub(b, a))
-
-    if riser_dir is None:
-        raise Skip(u"Не удалось определить направление примыкающего участка.")
-
-    # Перепад по вертикали «съедается» только вертикальным участком:
-    # у наклонного новая точка стыка ушла бы в сторону от его оси
-    if abs(dot(riser_dir, XYZ.BasisZ)) < VERTICAL_TOLERANCE:
-        raise Skip(
-            u"Примыкающий участок не вертикальный — перепад ему не отдать. "
-            u"Включите «Переносить всё, что дальше по трассе»."
-        )
-
-    # Дальний конец стояка остаётся на месте, ближний уезжает вместе с трассой
-    if a.DistanceTo(moved_endpoint) >= b.DistanceTo(moved_endpoint):
-        far_end = a
-    else:
-        far_end = b
-
-    junction = xyz_add(moved_endpoint, move_vec)
-
-    if abs(far_end.X - junction.X) > 0.01 or abs(far_end.Y - junction.Y) > 0.01:
-        raise Skip(u"Примыкающий стояк смещён в плане относительно трассы.")
-
-    new_length = far_end.DistanceTo(junction)
-
-    if new_length < MIN_SEGMENT_FT:
-        raise Skip(
-            u"Стояку не хватит длины: после правки останется {} мм (минимум {} мм).".format(
-                fmt(round(new_length / MM_TO_FT, 1)),
-                fmt(MIN_SEGMENT_MM)
+        if new_length < MIN_SEGMENT_FT:
+            raise Skip(
+                u"Стояку {} не хватит длины: останется {} мм (минимум {} мм).".format(
+                    label,
+                    fmt(round(new_length / MM_TO_FT, 1)),
+                    fmt(MIN_SEGMENT_MM)
+                )
             )
-        )
 
-    # Стык не должен перескочить через дальний конец
-    old_dir = normalize(xyz_sub(moved_endpoint, far_end))
-    new_dir = normalize(xyz_sub(junction, far_end))
+        prepared.append({
+            u"riser_id": item[u"riser_id"],
+            u"from_id": item[u"from_id"],
+            u"point": point,
+            u"far": far,
+            u"new_near": new_near,
+            u"label": label,
+        })
 
-    if old_dir is None or new_dir is None or dot(old_dir, new_dir) < 0:
-        raise Skip(u"Смещение больше длины примыкающего стояка.")
-
-    return {
-        u"fitting_id": fitting_id,
-        u"riser_id": riser.Id,
-        u"far_end": far_end,
-        u"junction": junction,
-        u"label": element_label(riser),
-    }
-
+    return prepared
 
 def remember_external_connections(source):
     data = []
@@ -1293,8 +1312,7 @@ def analyze_element(mep, p1, p2, ctx, blocked_ids):
         static_endpoint = end
 
     move_chain_ids = None
-    absorb = None
-    skip_restore_ids = set()
+    absorbers = []
 
     if ctx[u"move_chain"]:
         # Старое поведение: вся ветка за точкой разрыва едет вместе с участком
@@ -1314,11 +1332,16 @@ def analyze_element(mep, p1, p2, ctx, blocked_ids):
             MAX_CHAIN_DEPTH
         )
     else:
-        # Перепад отдаём примыкающему стояку: он укоротится, ветка не поедет
-        absorb = find_absorbing_riser(mep, moved_endpoint, move_vec, source_id)
+        # Горизонтальная часть уезжает вместе с трассой, перепад достаётся
+        # первому же вертикальному участку — он укоротится или удлинится
+        move_chain_ids, found = collect_local_move_set(
+            mep,
+            moved_endpoint,
+            blocked_ids,
+            MAX_CHAIN_DEPTH
+        )
 
-        if absorb is not None and absorb[u"fitting_id"] is not None:
-            skip_restore_ids.add(absorb[u"fitting_id"].IntegerValue)
+        absorbers = prepare_absorbers(found, move_vec)
 
     return {
         u"mep": mep,
@@ -1339,8 +1362,7 @@ def analyze_element(mep, p1, p2, ctx, blocked_ids):
         u"profile_use_x": profile_use_x,
         u"external_connections": external_connections,
         u"move_chain_ids": move_chain_ids,
-        u"absorb": absorb,
-        u"skip_restore_ids": skip_restore_ids,
+        u"absorbers": absorbers,
         u"moved_endpoint": moved_endpoint,
         u"static_endpoint": static_endpoint,
         u"warnings": warnings,
@@ -1418,6 +1440,25 @@ def apply_plan(plan):
 
     doc.Delete(mep.Id)
 
+    absorbers = plan[u"absorbers"]
+
+    # Стык «горизонталь — стояк» разъединяем: дальше они поедут по-разному
+    for item in absorbers:
+        if item[u"from_id"] is None:
+            continue
+
+        try:
+            from_el = doc.GetElement(ElementId(item[u"from_id"]))
+            riser = doc.GetElement(item[u"riser_id"])
+
+            c_from = nearest_connector(from_el, item[u"point"])
+            c_riser = nearest_connector(riser, item[u"point"])
+
+            if c_from is not None and c_riser is not None:
+                c_from.DisconnectFrom(c_riser)
+        except:
+            pass
+
     moved_count = 0
 
     if plan[u"move_chain_ids"] is not None:
@@ -1434,58 +1475,66 @@ def apply_plan(plan):
                 )
             )
 
-    # --- перепад отдан примыкающему стояку ---
-    absorb = plan[u"absorb"]
-    riser_label = None
+    # --- стояки: дальний конец на месте, ближний догоняет трассу ---
+    riser_labels = []
 
-    if absorb is not None:
-        riser_label = absorb[u"label"]
-
-        # Старый отвод больше не подходит: стык переехал по высоте
-        if absorb[u"fitting_id"] is not None:
-            try:
-                doc.Delete(absorb[u"fitting_id"])
-            except Exception as ex:
-                warnings.append(
-                    u"{}: не удалён старый отвод: {}".format(
-                        plan[u"label"], unicode(ex)
-                    )
-                )
-
-        doc.Regenerate()
-
-        riser = doc.GetElement(absorb[u"riser_id"])
+    for item in absorbers:
+        riser = doc.GetElement(item[u"riser_id"])
 
         if riser is None:
-            raise Exception(u"Примыкающий стояк не найден после удаления отвода.")
+            warnings.append(
+                u"{}: стояк {} не найден.".format(plan[u"label"], item[u"label"])
+            )
+            continue
 
         try:
             riser.Location.Curve = Line.CreateBound(
-                absorb[u"far_end"], absorb[u"junction"]
+                item[u"far"], item[u"new_near"]
             )
         except Exception as ex:
             raise Exception(
-                u"Не удалось укоротить примыкающий стояк: {}".format(unicode(ex))
+                u"Не удалось изменить стояк {}: {}".format(
+                    item[u"label"], unicode(ex)
+                )
             )
 
         doc.Regenerate()
 
-        ok3, e3 = connect_with_elbow(
-            moved_el,
-            absorb[u"junction"],
-            riser,
-            absorb[u"junction"]
-        )
+        # Собираем стык обратно: коннекторы снова в одной точке
+        if item[u"from_id"] is None:
+            from_el = moved_el
+        else:
+            from_el = doc.GetElement(ElementId(item[u"from_id"]))
 
-        if not ok3:
-            warnings.append(
-                u"{}: не создан отвод к стояку: {}".format(plan[u"label"], e3)
+        connected = False
+
+        try:
+            c_from = nearest_connector(from_el, item[u"new_near"])
+            c_riser = nearest_connector(riser, item[u"new_near"])
+
+            if c_from is not None and c_riser is not None:
+                c_from.ConnectTo(c_riser)
+                connected = True
+        except:
+            connected = False
+
+        if not connected:
+            ok3, e3 = connect_with_elbow(
+                from_el, item[u"new_near"], riser, item[u"new_near"]
             )
+
+            if not ok3:
+                warnings.append(
+                    u"{}: не собран стык со стояком {}: {}".format(
+                        plan[u"label"], item[u"label"], e3
+                    )
+                )
+
+        riser_labels.append(item[u"label"])
 
     restored, restore_skipped = restore_external_connections(
         plan[u"external_connections"],
-        new_elements,
-        plan[u"skip_restore_ids"]
+        new_elements
     )
 
     for s in restore_skipped:
@@ -1495,7 +1544,7 @@ def apply_plan(plan):
         u"new_count": len(new_elements),
         u"moved_count": moved_count,
         u"restored": len(restored),
-        u"riser_label": riser_label,
+        u"riser_labels": riser_labels,
         u"warnings": warnings,
     }
 
@@ -1634,7 +1683,12 @@ try:
         fail(u"\n".join(lines))
 
     # ---------- отчёт ----------
-    risers = [s[u"riser_label"] for s in done if s[u"riser_label"]]
+    risers = []
+
+    for s in done:
+        for label in s[u"riser_labels"]:
+            risers.append(label)
+
     total_moved = sum(s[u"moved_count"] for s in done)
     total_restored = sum(s[u"restored"] for s in done)
     total_new = sum(s[u"new_count"] for s in done)
@@ -1678,12 +1732,19 @@ try:
 
     if move_chain:
         msg += u"\nПеремещено связанных элементов: {}".format(total_moved)
-    elif risers:
-        msg += u"\nУкорочено (удлинено) стояков: {} — {}".format(
-            len(risers),
-            u", ".join(risers[:5])
+    else:
+        msg += u"\nПереехало вместе с трассой: {} (горизонталь и отводы)".format(
+            total_moved
         )
-        msg += u"\nОстальная ветка осталась на месте."
+
+        if risers:
+            msg += u"\nСтояков подрезано по высоте: {} — {}".format(
+                len(risers),
+                u", ".join(risers[:5])
+            )
+            msg += u"\nВсё, что за ними, осталось на месте."
+        else:
+            msg += u"\nВертикальных участков на пути не нашлось."
 
     if skipped:
         msg += u"\n\nПропущено участков: {}\n".format(len(skipped))
