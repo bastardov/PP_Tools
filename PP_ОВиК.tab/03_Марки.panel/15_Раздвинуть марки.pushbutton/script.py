@@ -108,6 +108,7 @@ def load_saved():
             saved[key] = default
 
     for key, default in (
+        (u"tangle", True),
         (u"enable_leader", True),
         (u"rebuild_elbow", True),
     ):
@@ -131,6 +132,7 @@ def save_chosen(options):
         my_config.gap_mm = options.get(u"gap_mm")
         my_config.offset_mm = options.get(u"offset_mm")
         my_config.leader_mm = options.get(u"leader_mm")
+        my_config.tangle = options.get(u"tangle")
         my_config.enable_leader = options.get(u"enable_leader")
         my_config.rebuild_elbow = options.get(u"rebuild_elbow")
         my_config.categories = options.get(u"categories")
@@ -218,9 +220,28 @@ def build_report(stats, applied):
     before = stats.get(u"tags_before", 0)
     after = stats.get(u"tags_after", 0)
 
-    lines.append(u"Раздвинуто марок: {}.".format(moved))
-    lines.append(u"Накладывались: {} {}, осталось наложенных: {}.".format(
+    lines.append(u"Переставлено марок: {}.".format(moved))
+    lines.append(u"Было с бедой: {} {}, осталось: {}.".format(
         before, tags_word(before), after))
+
+    crossings_before = stats.get(u"crossings_before", 0)
+    through_before = stats.get(u"through_before", 0)
+
+    if crossings_before or through_before:
+        lines.append(u"")
+
+        if crossings_before:
+            lines.append(u"Пересечений выносок: {} \u2192 {}.".format(
+                crossings_before, stats.get(u"crossings_after", 0)))
+
+        if through_before:
+            lines.append(u"Выносок сквозь чужой текст: {} \u2192 {}.".format(
+                through_before, stats.get(u"through_after", 0)))
+
+        swapped = stats.get(u"swapped", 0)
+
+        if swapped:
+            lines.append(u"Марок переставлено местами: {}.".format(swapped))
 
     leaders = applied.get(u"leaders", 0)
 
@@ -229,9 +250,9 @@ def build_report(stats, applied):
 
     if after:
         lines.append(u"")
-        lines.append(u"Оставшиеся марки выделены в модели: им не хватило "
-                     u"разрешённого смещения. Увеличьте максимальное смещение "
-                     u"или разведите их вручную.")
+        lines.append(u"Оставшиеся марки выделены в модели. Обычно им не хватило "
+                     u"разрешённого смещения или места по соседству: увеличьте "
+                     u"максимальное смещение либо разведите их вручную.")
 
     failed = applied.get(u"failed") or []
 
@@ -290,15 +311,19 @@ if not boxes:
          u"области подрезки.")
 
 positions = [[box[u"hu"], box[u"hv"]] for box in boxes]
-overlapping_pairs, overlapping_tags = pp_tag_layout.count_overlaps(boxes, positions, 0.0)
 
-if not overlapping_pairs:
-    fail(u"Ни одна марка не накладывается на соседнюю — раздвигать нечего.\n\n"
+overlapping_pairs, overlapping_tags = pp_tag_layout.count_overlaps(boxes, positions, 0.0)
+crossings, through, leader_tags = pp_tag_layout.count_leader_problems(boxes, positions)
+
+if not overlapping_pairs and not crossings and not through:
+    fail(u"Марки не накладываются друг на друга, выноски не перепутаны — "
+         u"разбирать нечего.\n\n"
          u"Проверено марок: {}.".format(len(boxes)))
 
 
-def solve(scoped_boxes, gap_ft, offset_ft, mode):
-    return pp_tag_layout.solve(scoped_boxes, gap_ft, offset_ft, mode)
+def solve(scoped_boxes, gap_ft, offset_ft, mode, leaders):
+    return pp_tag_layout.solve(
+        scoped_boxes, gap_ft, offset_ft, mode, leaders=leaders)
 
 
 state = {
@@ -306,6 +331,8 @@ state = {
     u"selected_ids": selected_ids,
     u"categories": build_categories(boxes),
     u"overlapping": len(overlapping_tags),
+    u"crossing": len(leader_tags),
+    u"sizes": pp_tag_layout.size_summary(boxes, view),
     u"scale": pp_tag_layout.view_scale(view),
     u"ft_per_mm": pp_tag_layout.mm_to_ft(1.0, view),
     u"solve": solve,

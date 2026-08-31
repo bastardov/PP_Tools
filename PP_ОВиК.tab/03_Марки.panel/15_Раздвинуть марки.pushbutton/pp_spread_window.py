@@ -52,6 +52,7 @@ DEFAULTS = {
     u"gap_mm": 1.5,
     u"offset_mm": 20.0,
     u"leader_mm": 5.0,
+    u"tangle": True,
     u"enable_leader": True,
     u"rebuild_elbow": True,
     u"categories": None,
@@ -124,6 +125,8 @@ class SpreadTagsVM(pp_wpf.Notifier):
         self._all_categories = state.get(u"categories") or []
         self._scale = state.get(u"scale", 100)
         self._overlapping = state.get(u"overlapping", 0)
+        self._crossing = state.get(u"crossing", 0)
+        self._sizes = state.get(u"sizes")
 
         options = dict(DEFAULTS)
 
@@ -147,6 +150,7 @@ class SpreadTagsVM(pp_wpf.Notifier):
         self._offset_text = format_mm(options.get(u"offset_mm"))
         self._leader_text = format_mm(options.get(u"leader_mm"))
 
+        self._tangle = bool(options.get(u"tangle"))
         self._enable_leader = bool(options.get(u"enable_leader"))
         self._rebuild_elbow = bool(options.get(u"rebuild_elbow"))
 
@@ -191,14 +195,22 @@ class SpreadTagsVM(pp_wpf.Notifier):
         if not total:
             return u"На активном виде нет марок."
 
-        if not self._overlapping:
-            return u"На активном виде {} {}, ни одна не накладывается на соседнюю.".format(
+        beds = []
+
+        if self._overlapping:
+            beds.append(u"накладываются {}".format(self._overlapping))
+
+        if self._crossing:
+            beds.append(u"выноски перепутаны у {}".format(self._crossing))
+
+        if not beds:
+            return u"На активном виде {} {}, и с ними всё в порядке.".format(
                 total, tags_word(total))
 
         return (
-            u"На активном виде {} {}, из них накладываются {}. "
+            u"На активном виде {} {}, из них {}. "
             u"Марки разъедутся на минимальное расстояние, остальные останутся на местах."
-        ).format(total, tags_word(total), self._overlapping)
+        ).format(total, tags_word(total), u" и ".join(beds))
 
     @property
     def SelectedLabel(self):
@@ -240,6 +252,29 @@ class SpreadTagsVM(pp_wpf.Notifier):
         return self._enable_leader
 
     @property
+    def EnableTangle(self):
+        return self._tangle
+
+    @property
+    def SizeHint(self):
+        u"""Замеренный габарит марки. Без этой строки непонятно, почему марки
+        разъезжаются именно так далеко."""
+        if not self._sizes:
+            return u""
+
+        return (
+            u"Замерено: марка в среднем {} \u00d7 {} мм на листе, "
+            u"самая крупная {} \u00d7 {} мм. Если высота заметно больше видимого "
+            u"текста, значит в семействе марки есть пустая строка или "
+            u"подчёркивание \u2014 они тоже занимают место."
+        ).format(
+            format_mm(self._sizes.get(u"avg_w")),
+            format_mm(self._sizes.get(u"avg_h")),
+            format_mm(self._sizes.get(u"max_w")),
+            format_mm(self._sizes.get(u"max_h"))
+        )
+
+    @property
     def GapHint(self):
         return self._model_hint(parse_number(self._gap_text))
 
@@ -270,6 +305,32 @@ class SpreadTagsVM(pp_wpf.Notifier):
             return u"Ни одна марка не сдвинется"
 
         return u"Разъедется {} {} из {}".format(moved, tags_word(moved), before)
+
+    @property
+    def LeaderResult(self):
+        u"""Отдельная строка про выноски: раздвижка и распутывание — разные
+        беды, и мерить их одним числом нельзя."""
+        if self._preview is None or not self._tangle:
+            return u""
+
+        before = self._preview.get(u"crossings_before", 0)
+        after = self._preview.get(u"crossings_after", 0)
+        through_before = self._preview.get(u"through_before", 0)
+        through_after = self._preview.get(u"through_after", 0)
+
+        parts = []
+
+        if before:
+            parts.append(u"пересечений выносок {} \u2192 {}".format(before, after))
+
+        if through_before:
+            parts.append(u"выносок сквозь чужой текст {} \u2192 {}".format(
+                through_before, through_after))
+
+        if not parts:
+            return u"Выноски в порядке: ни пересечений, ни проходов сквозь чужой текст."
+
+        return u"Выноски: " + u", ".join(parts) + u"."
 
     @property
     def ResultHint(self):
@@ -339,6 +400,10 @@ class SpreadTagsVM(pp_wpf.Notifier):
         return self._mode
 
     @property
+    def tangle(self):
+        return self._tangle
+
+    @property
     def scope(self):
         return self._scope
 
@@ -380,6 +445,10 @@ class SpreadTagsVM(pp_wpf.Notifier):
         self._leader_text = text
         self.revalidate()
 
+    def set_tangle(self, value):
+        self._tangle = bool(value)
+        self.notify(u"EnableTangle")
+
     def set_enable_leader(self, value):
         self._enable_leader = bool(value)
         self.notify(u"EnableLeader")
@@ -396,7 +465,7 @@ class SpreadTagsVM(pp_wpf.Notifier):
 
     def set_preview(self, preview):
         self._preview = preview
-        self.notify(u"ResultText", u"ResultHint", u"IsValid")
+        self.notify(u"ResultText", u"ResultHint", u"LeaderResult", u"IsValid")
 
     # ---------- проверка ввода ---------------------------------------
 
@@ -406,7 +475,7 @@ class SpreadTagsVM(pp_wpf.Notifier):
         if error:
             self._preview = None
             self._set_status(error, True)
-            self.notify(u"ResultText", u"ResultHint")
+            self.notify(u"ResultText", u"ResultHint", u"LeaderResult")
             return False
 
         self._set_status(u"", False)
@@ -448,6 +517,7 @@ class SpreadTagsVM(pp_wpf.Notifier):
             u"gap_mm": self.gap_mm,
             u"offset_mm": self.offset_mm,
             u"leader_mm": self.leader_mm,
+            u"tangle": self._tangle,
             u"enable_leader": self._enable_leader,
             u"rebuild_elbow": self._rebuild_elbow,
             u"categories": sorted(self._checked),
@@ -504,6 +574,7 @@ class SpreadTagsWindow(object):
             find("TxtOffset").Text = self.vm._offset_text
             find("TxtLeaderMm").Text = self.vm._leader_text
 
+            find("ChkTangle").IsChecked = self.vm._tangle
             find("ChkLeader").IsChecked = self.vm._enable_leader
             find("ChkElbow").IsChecked = self.vm._rebuild_elbow
 
@@ -615,6 +686,18 @@ class SpreadTagsWindow(object):
         find("TxtLeaderMm").TextChanged += on_leader
 
         @guard
+        def on_tangle_flag(sender, args):
+            if self._suppress:
+                return
+
+            self.vm.set_tangle(sender.IsChecked)
+            self._recompute()
+
+        chk_tangle = find("ChkTangle")
+        chk_tangle.Checked += on_tangle_flag
+        chk_tangle.Unchecked += on_tangle_flag
+
+        @guard
         def on_leader_flag(sender, args):
             if self._suppress:
                 return
@@ -709,7 +792,8 @@ class SpreadTagsWindow(object):
             self._scoped_boxes(),
             self.vm.gap_mm * ft_per_mm,
             self.vm.offset_mm * ft_per_mm,
-            self.vm.mode
+            self.vm.mode,
+            self.vm.tangle
         )
 
         self._last_moves = preview.get(u"moves") or {}

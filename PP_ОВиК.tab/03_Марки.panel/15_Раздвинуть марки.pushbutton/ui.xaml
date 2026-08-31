@@ -113,34 +113,43 @@
     </StackPanel>
 
     <!-- ===== Размеры ===== -->
-    <Grid Grid.Row="6" Margin="0,14,0,0">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="*"/>
-      </Grid.ColumnDefinitions>
+    <StackPanel Grid.Row="6" Margin="0,14,0,0">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
-      <StackPanel Grid.Column="0" Margin="0,0,7,0">
-        <TextBlock Style="{StaticResource FieldLabel}" Text="ЗАЗОР МЕЖДУ МАРКАМИ, ММ"/>
-        <TextBox x:Name="TxtGap" Style="{StaticResource TextBox.Field}" Margin="0,6,0,0"
-                 Tag="напр. 1.5"
-                 ToolTip="Просвет между соседними марками, в миллиметрах на листе"/>
-        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
-                   Text="{Binding GapHint}"/>
-      </StackPanel>
+        <StackPanel Grid.Column="0" Margin="0,0,7,0">
+          <TextBlock Style="{StaticResource FieldLabel}" Text="ЗАЗОР МЕЖДУ МАРКАМИ, ММ"/>
+          <TextBox x:Name="TxtGap" Style="{StaticResource TextBox.Field}" Margin="0,6,0,0"
+                   Tag="напр. 1.5"
+                   ToolTip="Просвет между соседними марками, в миллиметрах на листе"/>
+          <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
+                     Text="{Binding GapHint}"/>
+        </StackPanel>
 
-      <StackPanel Grid.Column="1" Margin="7,0,0,0">
-        <TextBlock Style="{StaticResource FieldLabel}" Text="МАКС. СМЕЩЕНИЕ МАРКИ, ММ"/>
-        <TextBox x:Name="TxtOffset" Style="{StaticResource TextBox.Field}" Margin="0,6,0,0"
-                 Tag="напр. 20"
-                 ToolTip="Насколько далеко марке разрешено уехать от исходного места. Кому не хватит — останется на месте и попадёт в отчёт"/>
-        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
-                   Text="{Binding OffsetHint}"/>
-      </StackPanel>
-    </Grid>
+        <StackPanel Grid.Column="1" Margin="7,0,0,0">
+          <TextBlock Style="{StaticResource FieldLabel}" Text="МАКС. СМЕЩЕНИЕ МАРКИ, ММ"/>
+          <TextBox x:Name="TxtOffset" Style="{StaticResource TextBox.Field}" Margin="0,6,0,0"
+                   Tag="напр. 20"
+                   ToolTip="Насколько далеко марке разрешено уехать от исходного места. Кому не хватит — останется на месте и попадёт в отчёт"/>
+          <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
+                     Text="{Binding OffsetHint}"/>
+        </StackPanel>
+      </Grid>
+
+      <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                 Text="{Binding SizeHint}"/>
+    </StackPanel>
 
     <!-- ===== Выноски ===== -->
     <StackPanel Grid.Row="7" Margin="0,16,0,0">
       <TextBlock Style="{StaticResource FieldLabel}" Text="ВЫНОСКИ"/>
+
+      <CheckBox x:Name="ChkTangle" Style="{StaticResource PP.CheckBox}" Margin="0,8,0,0"
+                Content="Разбирать пересечения выносок"
+                ToolTip="Перекрестившиеся выноски означают, что порядок марок не совпадает с порядком их элементов — раздвижкой это не лечится, марки меняются местами. Заодно марка не встаёт поверх чужой выноски. Снимите галочку, если нужна только раздвижка текста"/>
 
       <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
         <CheckBox x:Name="ChkLeader" Style="{StaticResource PP.CheckBox}"
@@ -170,6 +179,9 @@
                    TextWrapping="Wrap" Text="{Binding ResultText}"/>
         <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
                    TextWrapping="Wrap" Text="{Binding ResultHint}"/>
+        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
+                   TextWrapping="Wrap" Text="{Binding LeaderResult}"
+                   Visibility="{Binding LeaderResult, Converter={StaticResource NullVis}}"/>
       </StackPanel>
     </Border>
 
