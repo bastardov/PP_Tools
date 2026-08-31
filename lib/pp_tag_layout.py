@@ -1384,7 +1384,7 @@ def apply_moves(doc, view, boxes, moves, options=None):
     for box in boxes:
         names[box[u"id"]] = box.get(u"cat_name")
 
-    applied = 0
+    applied = []
     leaders = 0
     failed = []
 
@@ -1407,7 +1407,7 @@ def apply_moves(doc, view, boxes, moves, options=None):
 
         try:
             tag.TagHeadPosition = to_xyz(head, right, up, move_u, move_v)
-            applied += 1
+            applied.append(tag_id)
         except Exception as error:
             failed.append(u"{} (id {}): {}".format(
                 names.get(tag_id, u"Марка"), tag_id, unicode(error)))
@@ -1431,7 +1431,8 @@ def apply_moves(doc, view, boxes, moves, options=None):
                 tag, reference, to_xyz(elbow, right, up, move_u, move_v))
 
     return {
-        u"applied": applied,
+        u"applied": len(applied),
+        u"moved_ids": applied,
         u"leaders": leaders,
         u"failed": failed,
     }
@@ -1457,7 +1458,8 @@ def spread_tags(doc, view, tags=None, options=None, movable_ids=None):
         u"crossings_before": 0, u"crossings_after": 0,
         u"through_before": 0, u"through_after": 0,
         u"tags_before": 0, u"tags_after": 0,
-        u"unresolved": [], u"applied": 0, u"leaders": 0, u"failed": [],
+        u"unresolved": [], u"applied": 0, u"moved_ids": [],
+        u"leaders": 0, u"failed": [],
         u"boxes": [],
     }
 
@@ -1482,6 +1484,7 @@ def spread_tags(doc, view, tags=None, options=None, movable_ids=None):
 
     if not result[u"moves"]:
         result[u"applied"] = 0
+        result[u"moved_ids"] = []
         result[u"leaders"] = 0
         result[u"failed"] = []
 

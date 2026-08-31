@@ -248,11 +248,16 @@ def build_report(stats, applied):
     if leaders:
         lines.append(u"Включено выносок: {}.".format(leaders))
 
+    if moved:
+        lines.append(u"")
+        lines.append(u"Переставленные марки выделены в модели — сразу видно, "
+                     u"что изменилось.")
+
     if after:
         lines.append(u"")
-        lines.append(u"Оставшиеся марки выделены в модели. Обычно им не хватило "
-                     u"разрешённого смещения или места по соседству: увеличьте "
-                     u"максимальное смещение либо разведите их вручную.")
+        lines.append(u"Осталось с бедой: {}. Обычно не хватает разрешённого "
+                     u"смещения или места по соседству — увеличьте максимальное "
+                     u"смещение либо разведите вручную.".format(after))
 
     failed = applied.get(u"failed") or []
 
@@ -273,6 +278,11 @@ def build_report(stats, applied):
 
 
 def select_in_model(ids):
+    u"""Выделяем ровно то, что переставили.
+
+    Раньше выделялись все марки, оставшиеся с бедой, и на плотном плане это
+    выглядело как «выделило вообще всё» — пользы ноль.
+    """
     if not ids:
         return
 
@@ -368,9 +378,8 @@ except Exception as error:
     fail(u"Не удалось раздвинуть марки: {}".format(unicode(error)))
 
 stats = options.get(u"stats") or {}
-unresolved = stats.get(u"unresolved") or []
 
-select_in_model(unresolved)
+select_in_model(applied.get(u"moved_ids") or [])
 
 pp_wpf.show_report(
     build_report(stats, applied),
