@@ -1,0 +1,127 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Опуск / Подъём элементов"
+        Width="500"
+        Height="590"
+        MinWidth="450"
+        MinHeight="520"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <TextBlock Grid.Row="0" Style="{StaticResource H1}"
+               Text="Опуск / Подъём элементов"/>
+
+    <TextBlock Grid.Row="1" Style="{StaticResource Subtitle}" Margin="0,4,0,0"
+               Text="{Binding Subtitle}" TextWrapping="Wrap"/>
+
+    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,14,0,0"
+            Padding="14" MinHeight="270">
+      <StackPanel>
+        <TextBlock Style="{StaticResource FieldLabel}" Text="НАПРАВЛЕНИЕ"/>
+        <WrapPanel Margin="0,4,0,0">
+          <RadioButton x:Name="ChipDown" Style="{StaticResource RadioButton.Chip}"
+                       GroupName="MoveMode" Content="Опустить" MinWidth="104"
+                       ToolTip="Сдвинуть всю выбранную группу вниз на заданное расстояние"/>
+          <RadioButton x:Name="ChipUp" Style="{StaticResource RadioButton.Chip}"
+                       GroupName="MoveMode" Content="Поднять" MinWidth="104"
+                       ToolTip="Сдвинуть всю выбранную группу вверх на заданное расстояние"/>
+          <RadioButton x:Name="ChipLevel" Style="{StaticResource RadioButton.Chip}"
+                       GroupName="MoveMode" Content="На отметку" MinWidth="116"
+                       ToolTip="Поставить выбранную опорную отметку группы на высоту от уровня"/>
+        </WrapPanel>
+
+        <StackPanel Margin="0,18,0,0"
+                    Visibility="{Binding IsByOffset, Converter={StaticResource BoolVis}}">
+          <TextBlock Style="{StaticResource FieldLabel}" Text="РАССТОЯНИЕ ПО ВЕРТИКАЛИ"/>
+          <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,6"
+                     Text="Введите положительную величину — направление выбрано выше."/>
+          <StackPanel Orientation="Horizontal">
+            <TextBox x:Name="TxtValue" Style="{StaticResource TextBox.Field}"
+                     Width="130" Tag="например 500"
+                     ToolTip="Расстояние перемещения в миллиметрах"/>
+            <TextBlock Style="{StaticResource Caption}" Text="мм" Margin="8,0,0,0"
+                       VerticalAlignment="Center"/>
+          </StackPanel>
+        </StackPanel>
+
+        <StackPanel Margin="0,18,0,0"
+                    Visibility="{Binding IsByLevel, Converter={StaticResource BoolVis}}">
+          <TextBlock Style="{StaticResource FieldLabel}" Text="УРОВЕНЬ"/>
+          <ComboBox x:Name="CmbLevel" Style="{StaticResource PP.ComboBox}" Margin="0,6,0,0"
+                    ToolTip="Уровень модели, от которого отсчитывается целевая отметка"/>
+
+          <TextBlock Style="{StaticResource FieldLabel}" Text="ОТМЕТКА ОТ УРОВНЯ" Margin="0,14,0,0"/>
+          <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,6"
+                     Text="Ниже уровня — со знаком минус, например −150."/>
+          <StackPanel Orientation="Horizontal">
+            <TextBox x:Name="TxtElevation" Style="{StaticResource TextBox.Field}"
+                     Width="130" Tag="например 2750"
+                     ToolTip="Целевая отметка относительно выбранного уровня"/>
+            <TextBlock Style="{StaticResource Caption}" Text="мм" Margin="8,0,0,0"
+                       VerticalAlignment="Center"/>
+          </StackPanel>
+
+          <TextBlock Style="{StaticResource FieldLabel}" Text="ЧТО ПОСТАВИТЬ НА ОТМЕТКУ" Margin="0,14,0,0"/>
+          <WrapPanel Margin="0,4,0,0">
+            <RadioButton x:Name="ChipAnchor" Style="{StaticResource RadioButton.Chip}"
+                         GroupName="ReferenceKind" Content="Опорную точку" MinWidth="128"
+                         ToolTip="Средняя отметка осей и точек вставки выбранных элементов"/>
+            <RadioButton x:Name="ChipBottom" Style="{StaticResource RadioButton.Chip}"
+                         GroupName="ReferenceKind" Content="Низ группы" MinWidth="104"
+                         ToolTip="Самая нижняя граница общей выборки"/>
+            <RadioButton x:Name="ChipTop" Style="{StaticResource RadioButton.Chip}"
+                         GroupName="ReferenceKind" Content="Верх группы" MinWidth="104"
+                         ToolTip="Самая верхняя граница общей выборки"/>
+          </WrapPanel>
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="3" Style="{StaticResource Card.Result}" Margin="0,14,0,0" Padding="14,12">
+      <StackPanel>
+        <TextBlock Style="{StaticResource FieldLabel}" Text="РЕЗУЛЬТАТ"/>
+        <TextBlock Style="{StaticResource Body.Result}" Margin="0,4,0,0"
+                   Text="{Binding Preview}" TextWrapping="Wrap"/>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="4" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="5" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtStatus" Grid.Column="0" Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}" Text="{Binding Status}"
+                 TextWrapping="Wrap" Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnCancel" Content="Отмена" Style="{StaticResource Button.Flat}"
+                Margin="0,0,8,0" ToolTip="Закрыть окно без изменений"/>
+        <Button x:Name="BtnRun" Content="Переместить" Style="{StaticResource Button.Primary}"
+                IsEnabled="{Binding IsValid}"
+                ToolTip="Переместить все выбранные элементы одной группой"/>
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>
