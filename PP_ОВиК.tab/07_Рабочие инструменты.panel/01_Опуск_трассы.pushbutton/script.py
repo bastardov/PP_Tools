@@ -40,6 +40,11 @@ class Stop(Exception):
     pass
 
 
+class Skip(Exception):
+    u"""Участок обработать нельзя. При одном участке = Stop, при нескольких — пропуск."""
+    pass
+
+
 def fail(message):
     raise Stop(message)
 
@@ -60,6 +65,12 @@ def rollback():
     try:
         if "t" in globals() and t.HasStarted() and not t.HasEnded():
             t.RollBack()
+    except Exception:
+        pass
+
+    try:
+        if "tg" in globals() and tg.HasStarted() and not tg.HasEnded():
+            tg.RollBack()
     except Exception:
         pass
 
@@ -106,6 +117,18 @@ def load_settings():
     except:
         saved[u"elev_mm"] = None
 
+    try:
+        saved[u"multi"] = bool(my_config.get_option("multi", False))
+    except:
+        saved[u"multi"] = False
+
+    # По умолчанию решётки и диффузоры остаются на месте: перенос их по высоте
+    # почти всегда неверен (потолок никуда не уехал)
+    try:
+        saved[u"move_equipment"] = bool(my_config.get_option("move_equipment", False))
+    except:
+        saved[u"move_equipment"] = False
+
     return saved
 
 
@@ -124,6 +147,9 @@ def save_settings(result):
 
         if result[u"elev_mm"] is not None:
             my_config.elev_mm = result[u"elev_mm"]
+
+        my_config.multi = result[u"multi"]
+        my_config.move_equipment = result[u"move_equipment"]
 
         script.save_config()
     except:
@@ -150,6 +176,13 @@ ALLOWED_MOVE_CATEGORIES = [
 ]
 
 
+# Арматура считается концевым оборудованием, только если подключена одним концом
+EQUIPMENT_IF_LEAF_CATEGORIES = [
+    int(BuiltInCategory.OST_DuctAccessory),
+    int(BuiltInCategory.OST_PipeAccessory)
+]
+
+
 class MepCurveSelectionFilter(ISelectionFilter):
     def AllowElement(self, elem):
         try:
@@ -162,26 +195,34 @@ class MepCurveSelectionFilter(ISelectionFilter):
 
 
 class SameElementPointSelectionFilter(ISelectionFilter):
-    def __init__(self, element_id):
-        self.element_id = element_id
+    u"""Точку берём только на уже выбранных участках."""
+
+    def __init__(self, element_ids):
+        self.ids = set()
+
+        for eid in element_ids:
+            try:
+                self.ids.add(eid.IntegerValue)
+            except:
+                pass
 
     def AllowElement(self, elem):
         try:
-            return elem.Id == self.element_id
+            return elem.Id.IntegerValue in self.ids
         except:
             return False
 
     def AllowReference(self, reference, point):
         try:
-            return reference.ElementId == self.element_id
+            return reference.ElementId.IntegerValue in self.ids
         except:
             return False
 
 
-def pick_point_on_element(element_id, message):
+def pick_point_on_element(element_ids, message):
     ref = uidoc.Selection.PickObject(
         ObjectType.PointOnElement,
-        SameElementPointSelectionFilter(element_id),
+        SameElementPointSelectionFilter(element_ids),
         message
     )
 
@@ -189,6 +230,53 @@ def pick_point_on_element(element_id, message):
         return ref.GlobalPoint
     except:
         return None
+
+
+def pick_targets(multi):
+    u"""Участки для обработки. При multi уважаем то, что уже выделено в модели."""
+    if not multi:
+        ref = uidoc.Selection.PickObject(
+            ObjectType.Element,
+            MepCurveSelectionFilter(),
+            u"Выберите трубу или воздуховод"
+        )
+
+        return [doc.GetElement(ref.ElementId)]
+
+    preselected = []
+
+    try:
+        for eid in uidoc.Selection.GetElementIds():
+            el = doc.GetElement(eid)
+
+            if isinstance(el, Pipe) or isinstance(el, Duct):
+                preselected.append(el)
+    except:
+        preselected = []
+
+    if preselected:
+        return preselected
+
+    refs = uidoc.Selection.PickObjects(
+        ObjectType.Element,
+        MepCurveSelectionFilter(),
+        u"Выберите трубы и воздуховоды, затем нажмите «Готово»"
+    )
+
+    return [doc.GetElement(r.ElementId) for r in refs]
+
+
+def element_label(el):
+    u"""«Воздуховоды 123456» — для строк отчёта."""
+    try:
+        name = el.Category.Name
+    except:
+        name = u"Элемент"
+
+    try:
+        return u"{} {}".format(name, el.Id.IntegerValue)
+    except:
+        return name
 
 
 def format_elev_m(value_mm):
@@ -252,7 +340,9 @@ def ask_move_settings():
         levels,
         saved[u"level_key"],
         saved[u"ref_kind"],
-        saved[u"elev_mm"]
+        saved[u"elev_mm"],
+        saved[u"multi"],
+        saved[u"move_equipment"]
     )
 
     if result is None:
@@ -367,6 +457,23 @@ def project_point_to_line_param(point, start, end):
         t = 1
 
     return t
+
+
+def project_param_raw(point, start, end):
+    u"""То же, что project_point_to_line_param, но БЕЗ обрезки в [0; 1].
+
+    Нужно при работе с несколькими участками: по значению вне [0; 1] видно,
+    что общая точка разрыва не попала на этот участок.
+    """
+    v = xyz_sub(end, start)
+    w = xyz_sub(point, start)
+
+    denom = dot(v, v)
+
+    if abs(denom) < 0.0000001:
+        return None
+
+    return dot(w, v) / denom
 
 
 def point_on_line(start, end, t):
@@ -660,6 +767,40 @@ def is_allowed_to_move(el):
     return get_category_id(el) in ALLOWED_MOVE_CATEGORIES
 
 
+def connected_count(el):
+    u"""Сколько коннекторов элемента реально к чему-то подключены."""
+    count = 0
+
+    for c in get_connectors(el):
+        try:
+            if c.IsConnected:
+                count += 1
+        except:
+            pass
+
+    return count
+
+
+def is_equipment(el):
+    u"""Концевое оборудование: решётка, диффузор или концевая арматура.
+
+    Арматура ПОСРЕДИ трассы (два подключения) оборудованием не считается —
+    иначе в перемещённой трассе останется дыра на месте клапана.
+    """
+    cid = get_category_id(el)
+
+    if cid is None:
+        return False
+
+    if cid == int(BuiltInCategory.OST_DuctTerminal):
+        return True
+
+    if cid in EQUIPMENT_IF_LEAF_CATEGORIES:
+        return connected_count(el) <= 1
+
+    return False
+
+
 def get_connected_owner_ids_from_connector(connector, source_id):
     result = []
 
@@ -678,8 +819,21 @@ def get_connected_owner_ids_from_connector(connector, source_id):
     return result
 
 
-def collect_connected_chain_from_start_ids(start_ids, source_id, max_depth):
+def collect_connected_chain_from_start_ids(start_ids, blocked_ids, max_depth,
+                                           move_equipment=True):
+    u"""Что поедет вслед за перемещаемым концом.
+
+    blocked_ids — сам участок и остальные выбранные участки: сквозь них
+    цепочка не идёт и переносить их не надо (каждый обрабатывается сам).
+
+    move_equipment=False — концевое оборудование (решётки, диффузоры,
+    концевая арматура) остаётся на месте: в цепочку не попадает и дальше
+    сквозь него не идём. Такие элементы возвращаются вторым значением.
+
+    Возврат: (List[ElementId] для переноса, set() id оставшихся на месте).
+    """
     visited = set()
+    stationary = set()
     queue = []
 
     for eid in start_ids:
@@ -694,7 +848,7 @@ def collect_connected_chain_from_start_ids(start_ids, source_id, max_depth):
         if eid.IntegerValue in visited:
             continue
 
-        if eid.IntegerValue == source_id:
+        if eid.IntegerValue in blocked_ids:
             continue
 
         el = doc.GetElement(eid)
@@ -703,6 +857,11 @@ def collect_connected_chain_from_start_ids(start_ids, source_id, max_depth):
             continue
 
         if not is_allowed_to_move(el):
+            continue
+
+        if not move_equipment and is_equipment(el):
+            # Оборудование остаётся на месте, и цепочка сквозь него не идёт
+            stationary.add(eid.IntegerValue)
             continue
 
         visited.add(eid.IntegerValue)
@@ -718,7 +877,7 @@ def collect_connected_chain_from_start_ids(start_ids, source_id, max_depth):
                     if owner is None:
                         continue
 
-                    if owner.Id.IntegerValue == source_id:
+                    if owner.Id.IntegerValue in blocked_ids:
                         continue
 
                     if owner.Id.IntegerValue not in visited:
@@ -731,7 +890,48 @@ def collect_connected_chain_from_start_ids(start_ids, source_id, max_depth):
     for int_id in visited:
         ids.Add(ElementId(int_id))
 
-    return ids
+    return ids, stationary
+
+
+def disconnect_from_stationary(chain_ids, stationary_ids):
+    u"""Разорвать стыки между уезжающей цепочкой и оставшимся оборудованием.
+
+    Без этого Revit оставит «подключение» между разъехавшимися элементами.
+    Вызывать внутри транзакции, до переноса.
+    """
+    if not stationary_ids:
+        return 0
+
+    count = 0
+
+    for eid in chain_ids:
+        el = doc.GetElement(eid)
+
+        if el is None:
+            continue
+
+        for c in get_connectors(el):
+            try:
+                refs = [r for r in c.AllRefs]
+            except:
+                continue
+
+            for ref in refs:
+                try:
+                    owner = ref.Owner
+
+                    if owner is None:
+                        continue
+
+                    if owner.Id.IntegerValue not in stationary_ids:
+                        continue
+
+                    c.DisconnectFrom(ref)
+                    count += 1
+                except:
+                    pass
+
+    return count
 
 
 def remember_external_connections(source):
@@ -764,12 +964,30 @@ def remember_external_connections(source):
     return data
 
 
-def restore_external_connections(connection_data, new_elements):
+def restore_external_connections(connection_data, new_elements,
+                                 stationary_ids=None,
+                                 moved_endpoint=None, static_endpoint=None):
+    u"""Вернуть подключения соседей к заново созданным участкам.
+
+    Оборудование, оставленное на месте (stationary_ids), к перемещённому
+    концу не подключаем: там теперь другая отметка. Его считаем отдельно.
+    """
     restored = []
     skipped = []
+    left_alone = 0
 
     for item in connection_data:
         try:
+            owner_int_id = item["owner_id"].IntegerValue
+
+            if stationary_ids and owner_int_id in stationary_ids \
+                    and moved_endpoint is not None and static_endpoint is not None:
+                origin = item["origin"]
+
+                if origin.DistanceTo(moved_endpoint) < origin.DistanceTo(static_endpoint):
+                    left_alone += 1
+                    continue
+
             old_owner = doc.GetElement(item["owner_id"])
 
             if old_owner is None:
@@ -821,99 +1039,45 @@ def restore_external_connections(connection_data, new_elements):
                 )
             )
 
-    return restored, skipped
+    return restored, skipped, left_alone
 
 
-try:
-    settings = ask_move_settings()
+def analyze_element(mep, p1, p2, ctx, blocked_ids):
+    u"""Геометрия одного участка: что и куда двигать. Ошибки — через Skip.
 
-    if settings is None:
-        raise OperationCanceledException()
-
-    mode = settings[u"mode"]
-    angle_deg = settings[u"angle"]
-
-    by_level = (mode == u"Отметка")
-
-    # Предупреждения, накопленные до старта транзакции
-    pre_warnings = []
-
-    if by_level:
-        # Величину и направление посчитаем после выбора участка:
-        # они зависят от текущей отметки и габарита сечения.
-        direction = None
-        move_mm = None
-        move_ft = None
-        move_vec = None
-    else:
-        direction = mode
-        move_mm = settings[u"value_mm"]
-
-        if move_mm is None or move_mm <= 0:
-            fail(
-                u"Значение должно быть больше 0 мм."
-            )
-
-        move_ft = move_mm * MM_TO_FT
-
-        if direction == u"Опуск":
-            move_vec = XYZ(0, 0, -move_ft)
-        else:
-            move_vec = XYZ(0, 0, move_ft)
-
-    ref = uidoc.Selection.PickObject(
-        ObjectType.Element,
-        MepCurveSelectionFilter(),
-        u"Выберите трубу или воздуховод"
-    )
-
-    mep = doc.GetElement(ref.ElementId)
+    Модель здесь не меняется: всё считается до транзакции, чтобы при
+    нескольких участках проблемный можно было пропустить, а не откатывать всё.
+    """
+    warnings = []
 
     curve = get_curve(mep)
 
     if curve is None:
-        fail(
-            u"У элемента не найдена ось LocationCurve."
-        )
+        raise Skip(u"У элемента не найдена ось LocationCurve.")
 
     if not isinstance(curve, Line):
-        fail(
-            u"Выбранный элемент должен быть прямым участком."
-        )
+        raise Skip(u"Элемент должен быть прямым участком.")
 
     start = curve.GetEndPoint(0)
     end = curve.GetEndPoint(1)
 
-    axis_vec = xyz_sub(end, start)
-    axis_unit = normalize(axis_vec)
+    axis_unit = normalize(xyz_sub(end, start))
 
     if axis_unit is None:
-        fail(
-            u"Не удалось определить направление трассы."
-        )
+        raise Skip(u"Не удалось определить направление трассы.")
 
-    p1 = pick_point_on_element(
-        mep.Id,
-        u"Укажите точку разрыва на выбранной трубе/воздуховоде"
-    )
+    t_split_raw = project_param_raw(p1, start, end)
+    t_dir_raw = project_param_raw(p2, start, end)
 
-    p2 = pick_point_on_element(
-        mep.Id,
-        u"Укажите точку направления на этой же трубе/воздуховоде"
-    )
+    if t_split_raw is None or t_dir_raw is None:
+        raise Skip(u"Не удалось спроецировать точки на ось элемента.")
 
-    if p1 is None or p2 is None:
-        fail(
-            u"Не удалось получить точку на элементе."
-        )
+    # Общая точка разрыва должна попадать на участок, а не за его конец
+    if t_split_raw < 0.0 or t_split_raw > 1.0:
+        raise Skip(u"Точка разрыва не попадает на этот участок.")
 
-    t_split = project_point_to_line_param(p1, start, end)
-    t_dir = project_point_to_line_param(p2, start, end)
-
-    if t_split is None or t_dir is None:
-        fail(
-            u"Не удалось спроецировать точки на ось элемента."
-        )
+    t_split = min(max(t_split_raw, 0.0), 1.0)
+    t_dir = min(max(t_dir_raw, 0.0), 1.0)
 
     split = point_on_line(start, end, t_split)
 
@@ -922,20 +1086,18 @@ try:
     len_to_end = split.DistanceTo(end)
 
     if total_len < MIN_SEGMENT_FT * 2:
-        fail(
-            u"Элемент слишком короткий для изменения отметки."
-        )
+        raise Skip(u"Участок слишком короткий для изменения отметки.")
 
     if len_to_start < MIN_SEGMENT_FT:
-        fail(
-            u"Точка разрыва слишком близко к началу элемента.\n\nМинимум: {} мм.".format(
+        raise Skip(
+            u"Точка разрыва слишком близко к началу участка (минимум {} мм).".format(
                 fmt(MIN_SEGMENT_MM)
             )
         )
 
     if len_to_end < MIN_SEGMENT_FT:
-        fail(
-            u"Точка разрыва слишком близко к концу элемента.\n\nМинимум: {} мм.".format(
+        raise Skip(
+            u"Точка разрыва слишком близко к концу участка (минимум {} мм).".format(
                 fmt(MIN_SEGMENT_MM)
             )
         )
@@ -943,29 +1105,13 @@ try:
     move_after_split = t_dir >= t_split
     source_id = mep.Id.IntegerValue
 
-    # --- режим «По отметке»: считаем смещение от текущей отметки ---
-    if by_level:
-        level_key = settings[u"level_key"]
-        level = None
+    angle_deg = ctx[u"angle_deg"]
 
-        for item in settings[u"levels"]:
-            if item[u"key"] == level_key:
-                level = item
-                break
-
-        if level is None:
-            fail(
-                u"Уровень «{}» в модели не найден.".format(level_key)
-            )
-
-        elev_mm = settings[u"elev_mm"]
-
-        if elev_mm is None:
-            fail(
-                u"Не задана отметка от уровня."
-            )
-
-        ref_kind = settings[u"ref_kind"]
+    # --- сколько и куда двигать ---
+    if ctx[u"by_level"]:
+        level = ctx[u"level"]
+        ref_kind = ctx[u"ref_kind"]
+        elev_mm = ctx[u"elev_mm"]
 
         half_ft = half_size_ft(mep, split)
 
@@ -973,8 +1119,8 @@ try:
             if ref_kind == u"середина":
                 half_ft = 0.0
             else:
-                fail(
-                    u"Не удалось определить высоту сечения участка.\n\n"
+                raise Skip(
+                    u"Не удалось определить высоту сечения. "
                     u"Задайте отметку середины (оси) — она не зависит от габарита."
                 )
 
@@ -990,18 +1136,17 @@ try:
 
         # Отметку меряем в точке разрыва: на наклонной трассе одного числа нет
         if abs(start.Z - end.Z) > 0.5 * MM_TO_FT:
-            pre_warnings.append(
-                u"Участок наклонный: отметка выдержана в точке разрыва, "
-                u"уклон перемещённой части сохранён."
+            warnings.append(
+                u"{}: участок наклонный, отметка выдержана в точке разрыва.".format(
+                    element_label(mep)
+                )
             )
 
         move_ft_signed = target_axis_z - split.Z
 
         if abs(move_ft_signed) < 0.5 * MM_TO_FT:
-            fail(
-                u"Участок уже на этой отметке.\n\n"
-                u"Текущая отметка {}: {} мм от «{}».".format(
-                    ref_kind,
+            raise Skip(
+                u"Участок уже на этой отметке (сейчас {} мм от «{}»).".format(
                     fmt(round((split.Z - axis_offset_ft - level[u"elev_ft"]) / MM_TO_FT, 1)),
                     level[u"key"]
                 )
@@ -1009,13 +1154,18 @@ try:
 
         direction = u"Опуск" if move_ft_signed < 0 else u"Подъем"
         move_ft = abs(move_ft_signed)
-        move_mm = move_ft / MM_TO_FT
-        move_vec = XYZ(0, 0, move_ft_signed)
+    else:
+        direction = ctx[u"mode"]
+        move_ft = ctx[u"value_mm"] * MM_TO_FT
+        move_ft_signed = -move_ft if direction == u"Опуск" else move_ft
+
+    move_mm = move_ft / MM_TO_FT
+    move_vec = XYZ(0, 0, move_ft_signed)
 
     if angle_deg >= 89.9:
         horizontal_offset_ft = 0.0
     else:
-        horizontal_offset_ft = abs(move_ft) / math.tan(math.radians(angle_deg))
+        horizontal_offset_ft = move_ft / math.tan(math.radians(angle_deg))
 
     horizontal_offset_mm = horizontal_offset_ft / MM_TO_FT
 
@@ -1025,8 +1175,8 @@ try:
         available_len = len_to_start
 
     if available_len < horizontal_offset_ft + MIN_SEGMENT_FT:
-        fail(
-            u"Недостаточно длины выбранной стороны для угла {}°.\n\nНужно минимум: {} мм\nДоступно примерно: {} мм".format(
+        raise Skip(
+            u"Не хватает длины для угла {}°: нужно {} мм, есть примерно {} мм.".format(
                 fmt(angle_deg),
                 fmt(round(horizontal_offset_mm + MIN_SEGMENT_MM, 1)),
                 fmt(round(available_len / MM_TO_FT, 1))
@@ -1070,9 +1220,13 @@ try:
     external_connections = remember_external_connections(mep)
 
     if move_after_split:
-        moving_endpoint_connector = nearest_connector(mep, end)
+        moved_endpoint = end
+        static_endpoint = start
     else:
-        moving_endpoint_connector = nearest_connector(mep, start)
+        moved_endpoint = start
+        static_endpoint = end
+
+    moving_endpoint_connector = nearest_connector(mep, moved_endpoint)
 
     first_connected_ids = []
 
@@ -1082,18 +1236,57 @@ try:
             source_id
         )
 
-    move_chain_ids = collect_connected_chain_from_start_ids(
+    move_chain_ids, stationary_ids = collect_connected_chain_from_start_ids(
         first_connected_ids,
-        source_id,
-        MAX_CHAIN_DEPTH
+        blocked_ids,
+        MAX_CHAIN_DEPTH,
+        ctx[u"move_equipment"]
     )
 
-    warnings = list(pre_warnings)
+    return {
+        u"mep": mep,
+        u"label": element_label(mep),
+        u"start": start,
+        u"end": end,
+        u"split": split,
+        u"move_after_split": move_after_split,
+        u"move_vec": move_vec,
+        u"move_mm": move_mm,
+        u"direction": direction,
+        u"horizontal_offset_mm": horizontal_offset_mm,
+        u"ramp_start": ramp_start,
+        u"ramp_end": ramp_end,
+        u"moved_segment_start": moved_segment_start,
+        u"moved_segment_end": moved_segment_end,
+        u"bend_axis": bend_axis,
+        u"profile_use_x": profile_use_x,
+        u"external_connections": external_connections,
+        u"move_chain_ids": move_chain_ids,
+        u"stationary_ids": stationary_ids,
+        u"moved_endpoint": moved_endpoint,
+        u"static_endpoint": static_endpoint,
+        u"warnings": warnings,
+    }
 
-    t = Transaction(doc, u"PP: Опуск / Подъем трассы")
-    t.Start()
 
-    if move_after_split:
+def apply_plan(plan):
+    u"""Перестройка одного участка. Вызывать внутри открытой транзакции."""
+    mep = plan[u"mep"]
+
+    start = plan[u"start"]
+    end = plan[u"end"]
+    split = plan[u"split"]
+    ramp_start = plan[u"ramp_start"]
+    ramp_end = plan[u"ramp_end"]
+    moved_segment_start = plan[u"moved_segment_start"]
+    moved_segment_end = plan[u"moved_segment_end"]
+
+    profile_use_x = plan[u"profile_use_x"]
+    bend_axis = plan[u"bend_axis"]
+
+    warnings = list(plan[u"warnings"])
+
+    if plan[u"move_after_split"]:
         static_el, err1 = create_same_mep(mep, start, split)
         ramp_el, err2 = create_same_mep(mep, ramp_start, ramp_end)
         moved_el, err3 = create_same_mep(mep, moved_segment_start, moved_segment_end)
@@ -1140,63 +1333,261 @@ try:
         ok2, e2 = connect_with_elbow(ramp_el, ramp_end, static_el, split)
 
     if not ok1:
-        warnings.append(u"Не создан первый отвод: {}".format(e1))
+        warnings.append(u"{}: не создан первый отвод: {}".format(plan[u"label"], e1))
 
     if not ok2:
-        warnings.append(u"Не создан второй отвод: {}".format(e2))
+        warnings.append(u"{}: не создан второй отвод: {}".format(plan[u"label"], e2))
 
     doc.Delete(mep.Id)
+
+    # Оборудование остаётся на месте — стык с ним честно разрываем,
+    # иначе Revit сочтёт разъехавшиеся элементы соединёнными
+    disconnected = disconnect_from_stationary(
+        plan[u"move_chain_ids"],
+        plan[u"stationary_ids"]
+    )
 
     moved_count = 0
 
     try:
-        if move_chain_ids and move_chain_ids.Count > 0:
-            ElementTransformUtils.MoveElements(doc, move_chain_ids, move_vec)
-            moved_count = move_chain_ids.Count
+        if plan[u"move_chain_ids"] and plan[u"move_chain_ids"].Count > 0:
+            ElementTransformUtils.MoveElements(
+                doc, plan[u"move_chain_ids"], plan[u"move_vec"]
+            )
+            moved_count = plan[u"move_chain_ids"].Count
     except Exception as ex:
         warnings.append(
-            u"Не удалось переместить связанную цепочку: {}".format(
-                unicode(ex)
+            u"{}: не удалось переместить связанную цепочку: {}".format(
+                plan[u"label"], unicode(ex)
             )
         )
 
-    restored, restore_skipped = restore_external_connections(
-        external_connections,
-        new_elements
+    restored, restore_skipped, _left_alone = restore_external_connections(
+        plan[u"external_connections"],
+        new_elements,
+        plan[u"stationary_ids"],
+        plan[u"moved_endpoint"],
+        plan[u"static_endpoint"]
     )
 
     for s in restore_skipped:
-        warnings.append(s)
+        warnings.append(u"{}: {}".format(plan[u"label"], s))
 
-    t.Commit()
+    return {
+        u"new_count": len(new_elements),
+        u"moved_count": moved_count,
+        u"restored": len(restored),
+        u"left_alone": len(plan[u"stationary_ids"]),
+        u"disconnected": disconnected,
+        u"warnings": warnings,
+    }
+
+
+try:
+    settings = ask_move_settings()
+
+    if settings is None:
+        raise OperationCanceledException()
+
+    mode = settings[u"mode"]
+    angle_deg = settings[u"angle"]
+    multi = settings[u"multi"]
+    move_equipment = settings[u"move_equipment"]
+
+    by_level = (mode == u"Отметка")
+
+    ctx = {
+        u"mode": mode,
+        u"angle_deg": angle_deg,
+        u"by_level": by_level,
+        u"value_mm": settings[u"value_mm"],
+        u"ref_kind": settings[u"ref_kind"],
+        u"elev_mm": settings[u"elev_mm"],
+        u"level": None,
+        u"move_equipment": move_equipment,
+    }
+
+    if by_level:
+        for item in settings[u"levels"]:
+            if item[u"key"] == settings[u"level_key"]:
+                ctx[u"level"] = item
+                break
+
+        if ctx[u"level"] is None:
+            fail(u"Уровень «{}» в модели не найден.".format(settings[u"level_key"]))
+
+        if settings[u"elev_mm"] is None:
+            fail(u"Не задана отметка от уровня.")
+    else:
+        if ctx[u"value_mm"] is None or ctx[u"value_mm"] <= 0:
+            fail(u"Значение должно быть больше 0 мм.")
+
+    targets = pick_targets(multi)
+    targets = [el for el in targets if el is not None]
+
+    if not targets:
+        fail(u"Не выбрано ни одного участка.")
+
+    target_ids = set()
+
+    for el in targets:
+        try:
+            target_ids.add(el.Id.IntegerValue)
+        except:
+            pass
+
+    if len(targets) > 1:
+        point_hint = u"Укажите точку разрыва на любом из выбранных участков"
+        dir_hint = u"Укажите точку направления на том же участке"
+    else:
+        point_hint = u"Укажите точку разрыва на выбранной трубе/воздуховоде"
+        dir_hint = u"Укажите точку направления на этой же трубе/воздуховоде"
+
+    element_ids = [el.Id for el in targets]
+
+    p1 = pick_point_on_element(element_ids, point_hint)
+    p2 = pick_point_on_element(element_ids, dir_hint)
+
+    if p1 is None or p2 is None:
+        fail(u"Не удалось получить точку на элементе.")
+
+    done = []
+    skipped = []
+    warnings = []
+
+    tg = TransactionGroup(doc, u"PP: Опуск / Подъем трассы")
+    tg.Start()
+
+    for mep in targets:
+        try:
+            if doc.GetElement(mep.Id) is None:
+                skipped.append((
+                    element_label(mep),
+                    u"участок исчез: он попал в перенос предыдущего."
+                ))
+                continue
+
+            # Остальные выбранные участки цепочкой не двигаем: каждый едет сам
+            plan = analyze_element(mep, p1, p2, ctx, target_ids)
+
+        except Skip as ex:
+            if len(targets) == 1:
+                fail(unicode(ex))
+
+            skipped.append((element_label(mep), unicode(ex)))
+            continue
+
+        t = Transaction(doc, u"PP: Опуск / Подъем участка")
+        t.Start()
+
+        try:
+            stats = apply_plan(plan)
+            t.Commit()
+        except Exception as ex:
+            try:
+                if t.HasStarted() and not t.HasEnded():
+                    t.RollBack()
+            except:
+                pass
+
+            if len(targets) == 1:
+                raise
+
+            skipped.append((element_label(mep), unicode(ex)))
+            continue
+
+        stats[u"label"] = plan[u"label"]
+        stats[u"direction"] = plan[u"direction"]
+        stats[u"move_mm"] = plan[u"move_mm"]
+        stats[u"horizontal_offset_mm"] = plan[u"horizontal_offset_mm"]
+
+        done.append(stats)
+
+        for w in stats[u"warnings"]:
+            warnings.append(w)
+
+    tg.Assimilate()
+
+    if not done:
+        lines = [u"Ни один участок не обработан."]
+
+        for label, reason in skipped:
+            lines.append(u"— {}: {}".format(label, reason))
+
+        fail(u"\n".join(lines))
+
+    # ---------- отчёт ----------
+    total_left_alone = sum(s[u"left_alone"] for s in done)
+    total_disconnected = sum(s[u"disconnected"] for s in done)
+    total_moved = sum(s[u"moved_count"] for s in done)
+    total_restored = sum(s[u"restored"] for s in done)
+    total_new = sum(s[u"new_count"] for s in done)
 
     msg = u""
 
     if by_level:
-        msg += u"Отметка {}: {} мм от «{}»\nНаправление: {}\n".format(
+        msg += u"Отметка {}: {} мм от «{}»\n".format(
             settings[u"ref_kind"],
             fmt(settings[u"elev_mm"]),
-            level[u"key"],
-            direction.lower()
+            ctx[u"level"][u"key"]
         )
 
-    msg += u"Величина: {} мм\nУгол: {}°\nГоризонтальный отступ: {} мм\nСоздано новых участков: {}\nПеремещено связанных элементов: {}\nВосстановлено подключений: {}".format(
-        fmt(round(move_mm, 1)),
-        fmt(angle_deg),
-        fmt(round(horizontal_offset_mm, 1)),
-        len(new_elements),
-        moved_count,
-        len(restored)
+    msg += u"Угол: {}°\n".format(fmt(angle_deg))
+
+    if len(done) == 1:
+        one = done[0]
+
+        msg += u"Направление: {}\nВеличина: {} мм\nГоризонтальный отступ: {} мм\n".format(
+            one[u"direction"].lower(),
+            fmt(round(one[u"move_mm"], 1)),
+            fmt(round(one[u"horizontal_offset_mm"], 1))
+        )
+    else:
+        msg += u"\nУчастки:\n"
+
+        for s in done:
+            msg += u"— {}: {} на {} мм, отступ {} мм\n".format(
+                s[u"label"],
+                s[u"direction"].lower(),
+                fmt(round(s[u"move_mm"], 1)),
+                fmt(round(s[u"horizontal_offset_mm"], 1))
+            )
+
+        msg += u"\n"
+
+    msg += u"Создано новых участков: {}\nПеремещено связанных элементов: {}\nВосстановлено подключений: {}".format(
+        total_new,
+        total_moved,
+        total_restored
     )
+
+    if not move_equipment and (total_left_alone or total_disconnected):
+        msg += u"\nОставлено на месте (оборудование): {}".format(total_left_alone)
+
+        if total_disconnected:
+            msg += u"\nРазорвано стыков с оборудованием: {} — подводки доделайте вручную".format(
+                total_disconnected
+            )
+
+    if skipped:
+        msg += u"\n\nПропущено участков: {}\n".format(len(skipped))
+
+        for label, reason in skipped[:10]:
+            msg += u"— {}: {}\n".format(label, reason)
 
     if warnings:
         msg += u"\n\nПредупреждения:\n" + u"\n".join(warnings[:10])
 
-    done_verb = u"Опущено" if direction == u"Опуск" else u"Поднято"
+    if len(done) == 1:
+        one = done[0]
+        done_verb = u"Опущено" if one[u"direction"] == u"Опуск" else u"Поднято"
+        title = u"{} на {} мм".format(done_verb, fmt(round(one[u"move_mm"], 1)))
+    else:
+        title = u"Обработано участков: {}".format(len(done))
 
     pp_wpf.show_report(
         msg,
-        title=u"{} на {} мм".format(done_verb, fmt(round(move_mm, 1))),
+        title=title,
         subtitle=TITLE
     )
 

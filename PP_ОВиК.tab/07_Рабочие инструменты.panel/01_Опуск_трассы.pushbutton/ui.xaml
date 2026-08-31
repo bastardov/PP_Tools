@@ -26,6 +26,7 @@
       <RowDefinition Height="Auto"/>   <!-- угол -->
       <RowDefinition Height="Auto"/>   <!-- величина -->
       <RowDefinition Height="Auto"/>   <!-- отметка от уровня -->
+      <RowDefinition Height="Auto"/>   <!-- галочки -->
       <RowDefinition Height="*"/>      <!-- растяжка -->
       <RowDefinition Height="Auto"/>   <!-- разделитель -->
       <RowDefinition Height="Auto"/>   <!-- подвал -->
@@ -172,10 +173,26 @@
                  Text="{Binding LevelHint}" TextWrapping="Wrap"/>
     </StackPanel>
 
-    <!-- ===== Подвал ===== -->
-    <Border Grid.Row="8" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+    <!-- ===== Галочки ===== -->
+    <StackPanel Grid.Row="7" Margin="0,16,0,0">
+      <TextBlock Style="{StaticResource FieldLabel}" Text="КАК РАБОТАТЬ"/>
 
-    <Grid Grid.Row="9" Margin="0,12,0,0">
+      <CheckBox x:Name="ChkMulti" Style="{StaticResource PP.CheckBox}" Margin="0,6,0,0"
+                Content="Несколько участков сразу"
+                ToolTip="Точка разрыва и точка направления указываются один раз и переносятся на все выбранные участки по перпендикуляру. Подходит для параллельных трасс. Если участки уже выделены в модели, окно возьмёт их"/>
+
+      <CheckBox x:Name="ChkMoveEquipment" Style="{StaticResource PP.CheckBox}" Margin="0,8,0,0"
+                Content="Переносить присоединённое оборудование"
+                ToolTip="Решётки, диффузоры и концевую арматуру. Снято — они остаются на своих отметках, а стык с ними разрывается: подводки доводите вручную. Арматура внутри трассы едет всегда"/>
+
+      <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                 Text="{Binding OptionsHint}"/>
+    </StackPanel>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="9" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="10" Margin="0,12,0,0">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/>
         <ColumnDefinition Width="Auto"/>

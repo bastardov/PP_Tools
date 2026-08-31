@@ -69,8 +69,12 @@ def parse_number(text):
 
 class DropRouteVM(pp_wpf.Notifier):
 
-    def __init__(self, mode, angle, value_mm, levels, level_key, ref_kind, elev_mm):
+    def __init__(self, mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
+                 multi=False, move_equipment=False):
         pp_wpf.Notifier.__init__(self)
+
+        self._multi = bool(multi)
+        self._move_equipment = bool(move_equipment)
 
         self._mode = mode if mode in (MODE_DOWN, MODE_UP, MODE_LEVEL) else MODE_DOWN
 
@@ -188,6 +192,20 @@ class DropRouteVM(pp_wpf.Notifier):
             u"отступ инструмент посчитает сам после выбора участка."
         ).format(level.get(u"key"))
 
+    @property
+    def OptionsHint(self):
+        if self._multi and not self._move_equipment:
+            return (u"Точки укажете один раз на любом из участков. "
+                    u"Решётки и диффузоры останутся на своих отметках.")
+
+        if self._multi:
+            return u"Точки укажете один раз на любом из выбранных участков."
+
+        if not self._move_equipment:
+            return u"Решётки, диффузоры и концевая арматура останутся на своих отметках."
+
+        return u"Всё, что подключено к перемещаемому концу, поедет вместе с трассой."
+
     # ---------- вычисляемые значения --------------------------------
 
     @property
@@ -276,6 +294,14 @@ class DropRouteVM(pp_wpf.Notifier):
         self._elev_text = text
         self.revalidate()
 
+    def set_multi(self, value):
+        self._multi = bool(value)
+        self.notify(u"OptionsHint")
+
+    def set_move_equipment(self, value):
+        self._move_equipment = bool(value)
+        self.notify(u"OptionsHint")
+
     def revalidate(self):
         u"""Единственное место, где решается, готово окно к запуску или нет."""
         if self.IsByLevel:
@@ -351,6 +377,8 @@ class DropRouteVM(pp_wpf.Notifier):
             u"level_id": level.get(u"id") if level else None,
             u"ref_kind": self._ref_kind,
             u"elev_mm": self.elev_mm,
+            u"multi": self._multi,
+            u"move_equipment": self._move_equipment,
         }
 
 
@@ -360,11 +388,13 @@ class DropRouteVM(pp_wpf.Notifier):
 
 class DropRouteWindow(object):
 
-    def __init__(self, mode, angle, value_mm, levels, level_key, ref_kind, elev_mm):
+    def __init__(self, mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
+                 multi=False, move_equipment=False):
         xaml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), u"ui.xaml")
 
         self.window = pp_wpf.load_window_file(xaml_path)
-        self.vm = DropRouteVM(mode, angle, value_mm, levels, level_key, ref_kind, elev_mm)
+        self.vm = DropRouteVM(mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
+                              multi, move_equipment)
         self.window.DataContext = self.vm
 
         self.accepted = False
@@ -394,6 +424,9 @@ class DropRouteWindow(object):
 
         find("TxtCustomAngle").Text = self.vm._custom_angle_text
         find("TxtValue").Text = self.vm._value_text
+
+        find("ChkMulti").IsChecked = self.vm._multi
+        find("ChkMoveEquipment").IsChecked = self.vm._move_equipment
 
         combo = find("CmbLevel")
         combo.Items.Clear()
@@ -507,6 +540,22 @@ class DropRouteWindow(object):
             find(name).TextChanged += make_elev_handler(kind)
 
         @guard
+        def on_multi(sender, args):
+            self.vm.set_multi(sender.IsChecked)
+
+        @guard
+        def on_move_equipment(sender, args):
+            self.vm.set_move_equipment(sender.IsChecked)
+
+        chk_multi = find("ChkMulti")
+        chk_multi.Checked += on_multi
+        chk_multi.Unchecked += on_multi
+
+        chk_equipment = find("ChkMoveEquipment")
+        chk_equipment.Checked += on_move_equipment
+        chk_equipment.Unchecked += on_move_equipment
+
+        @guard
         def on_run(sender, args):
             self._accept()
 
@@ -564,7 +613,8 @@ class DropRouteWindow(object):
 
 
 def ask_settings(mode, angle, value_mm, levels=None, level_key=None,
-                 ref_kind=None, elev_mm=None):
+                 ref_kind=None, elev_mm=None, multi=False, move_equipment=False):
     return DropRouteWindow(
-        mode, angle, value_mm, levels, level_key, ref_kind, elev_mm
+        mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
+        multi, move_equipment
     ).show()
