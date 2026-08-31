@@ -1,0 +1,209 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Расход из пространства"
+        Width="620"
+        MinWidth="540"
+        MinHeight="420"
+        SizeToContent="Height"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>   <!-- заголовок -->
+      <RowDefinition Height="Auto"/>   <!-- параметры пространства -->
+      <RowDefinition Height="Auto"/>   <!-- параметр решётки -->
+      <RowDefinition Height="Auto"/>   <!-- системы -->
+      <RowDefinition Height="Auto"/>   <!-- итог -->
+      <RowDefinition Height="Auto"/>   <!-- разделитель -->
+      <RowDefinition Height="Auto"/>   <!-- подвал -->
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0">
+      <TextBlock Style="{StaticResource H1}" Text="Расход из пространства"/>
+      <TextBlock Style="{StaticResource Subtitle}" Margin="0,2,0,0"
+                 TextWrapping="Wrap"
+                 Text="Расчётный расход пространства делится поровну между решётками внутри него и записывается каждой решётке."/>
+    </StackPanel>
+
+    <!-- ===== Параметры пространства ===== -->
+    <StackPanel Grid.Row="1" Margin="0,14,0,0">
+      <TextBlock Style="{StaticResource FieldLabel}" Text="ОТКУДА БЕРЁМ РАСХОД — ПАРАМЕТРЫ ПРОСТРАНСТВА"/>
+
+      <Border Style="{StaticResource Card}">
+        <Grid Margin="14,12,14,12">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                     Margin="0,0,12,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                     Text="ОБЩАЯ ВЫТЯЖКА"/>
+          <TextBox x:Name="TxtExhaustTotal" Grid.Row="0" Grid.Column="1"
+                   Style="{StaticResource TextBox.Field}"
+                   Tag="Имя параметра — например ADSK_Расчетная вытяжка"/>
+          <Button x:Name="BtnExhaustTotal" Grid.Row="0" Grid.Column="2" Content="Выбрать…"
+                  Style="{StaticResource Button.Flat}" Margin="8,0,0,0" Padding="14,7"
+                  ToolTip="Выбрать параметр пространства из параметров проекта"/>
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                     Margin="0,10,12,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                     Text="ОБЩИЙ ПРИТОК"/>
+          <TextBox x:Name="TxtSupplyTotal" Grid.Row="1" Grid.Column="1" Margin="0,10,0,0"
+                   Style="{StaticResource TextBox.Field}"
+                   Tag="Имя параметра — например ADSK_Расчетный приток"/>
+          <Button x:Name="BtnSupplyTotal" Grid.Row="1" Grid.Column="2" Content="Выбрать…"
+                  Style="{StaticResource Button.Flat}" Margin="8,10,0,0" Padding="14,7"
+                  ToolTip="Выбрать параметр пространства из параметров проекта"/>
+
+          <CheckBox x:Name="ChkWriteCounts" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+                    Style="{StaticResource PP.CheckBox}" Margin="0,16,0,0"
+                    Content="Записывать пространству количество найденных решёток"
+                    ToolTip="Снимите галочку, если этих параметров нет в проекте"/>
+
+          <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                     Margin="0,10,12,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                     Text="КОЛИЧЕСТВО РЕШЁТОК В"/>
+          <TextBox x:Name="TxtExhaustCount" Grid.Row="3" Grid.Column="1" Margin="0,10,0,0"
+                   Style="{StaticResource TextBox.Field}"
+                   Tag="Имя параметра — например PP_Количество решеток систем В"/>
+          <Button x:Name="BtnExhaustCount" Grid.Row="3" Grid.Column="2" Content="Выбрать…"
+                  Style="{StaticResource Button.Flat}" Margin="8,10,0,0" Padding="14,7"
+                  ToolTip="Выбрать параметр пространства из параметров проекта"/>
+
+          <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                     Margin="0,10,12,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                     Text="КОЛИЧЕСТВО РЕШЁТОК П"/>
+          <TextBox x:Name="TxtSupplyCount" Grid.Row="4" Grid.Column="1" Margin="0,10,0,0"
+                   Style="{StaticResource TextBox.Field}"
+                   Tag="Имя параметра — например PP_Количество решеток систем П"/>
+          <Button x:Name="BtnSupplyCount" Grid.Row="4" Grid.Column="2" Content="Выбрать…"
+                  Style="{StaticResource Button.Flat}" Margin="8,10,0,0" Padding="14,7"
+                  ToolTip="Выбрать параметр пространства из параметров проекта"/>
+        </Grid>
+      </Border>
+    </StackPanel>
+
+    <!-- ===== Параметр решётки ===== -->
+    <StackPanel Grid.Row="2" Margin="0,14,0,0">
+      <TextBlock Style="{StaticResource FieldLabel}" Text="КУДА ПИШЕМ — ПАРАМЕТР РЕШЁТКИ"/>
+
+      <Border Style="{StaticResource Card}">
+        <Grid Margin="14,12,14,12">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+
+          <TextBlock Grid.Column="0" Style="{StaticResource FieldLabel}"
+                     Margin="0,0,12,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                     Text="РАСХОД ВОЗДУХА"/>
+          <TextBox x:Name="TxtTerminalFlow" Grid.Column="1"
+                   Style="{StaticResource TextBox.Field}"
+                   Tag="Имя параметра — например ADSK_Расход воздуха"/>
+          <Button x:Name="BtnTerminalFlow" Grid.Column="2" Content="Выбрать…"
+                  Style="{StaticResource Button.Flat}" Margin="8,0,0,0" Padding="14,7"
+                  ToolTip="Выбрать параметр экземпляра воздухораспределителя"/>
+        </Grid>
+      </Border>
+    </StackPanel>
+
+    <!-- ===== Системы ===== -->
+    <StackPanel Grid.Row="3" Margin="0,14,0,0">
+      <ToggleButton x:Name="TglSystems"
+                    Style="{StaticResource ToggleButton.Expander}"
+                    Content="Как определяются вытяжка и приток"
+                    HorizontalAlignment="Left"/>
+
+      <Border Style="{StaticResource Card}" Margin="0,8,0,0"
+              Visibility="{Binding IsChecked, ElementName=TglSystems, Converter={StaticResource BoolVis}}">
+        <StackPanel Margin="14,12,14,12">
+          <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,10" TextWrapping="Wrap"
+                     Text="Решётка относится к вытяжке или притоку по имени своей системы. Префиксы перечисляются через запятую, регистр и пробелы не важны."/>
+
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Margin="0,0,7,0">
+              <TextBlock Style="{StaticResource FieldLabel}" Text="ИМЯ ВЫТЯЖНОЙ СИСТЕМЫ НАЧИНАЕТСЯ С"/>
+              <TextBox x:Name="TxtExhaustPrefixes" Style="{StaticResource TextBox.Field}"
+                       Tag="Через запятую — например В, ВЕ"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Margin="7,0,0,0">
+              <TextBlock Style="{StaticResource FieldLabel}" Text="ИМЯ ПРИТОЧНОЙ СИСТЕМЫ НАЧИНАЕТСЯ С"/>
+              <TextBox x:Name="TxtSupplyPrefixes" Style="{StaticResource TextBox.Field}"
+                       Tag="Через запятую — например П, ПЕ"/>
+            </StackPanel>
+          </Grid>
+
+          <TextBlock Style="{StaticResource FieldLabel}" Margin="0,14,0,6"
+                     Text="ПРОПУСКАТЬ СИСТЕМЫ, В ИМЕНИ КОТОРЫХ ЕСТЬ"/>
+          <TextBox x:Name="TxtExcludeWords" Style="{StaticResource TextBox.Field}"
+                   Tag="Через запятую — например ДУ, ПД, ПОДПОР"/>
+          <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                     Text="Так из расчёта уходит противодымная вентиляция: её расход инструмент не трогает, а решётки показывает в отчёте."/>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+
+    <!-- ===== Итог ===== -->
+    <Border Grid.Row="4" Style="{StaticResource Card.Result}" Margin="0,14,0,0">
+      <StackPanel>
+        <TextBlock Style="{StaticResource FieldLabel}" Text="ЧТО ПРОИЗОЙДЁТ ПОСЛЕ НАЖАТИЯ"/>
+        <TextBlock Style="{StaticResource Body.Result}"
+                   Foreground="{Binding ResultBrush}"
+                   Text="{Binding ResultText}"/>
+      </StackPanel>
+    </Border>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="5" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="6" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtStatus" Grid.Column="0"
+                 Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}"
+                 Text="{Binding Status}"
+                 TextWrapping="Wrap"
+                 VerticalAlignment="Center"
+                 Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnCancel" Content="Отмена"
+                Style="{StaticResource Button.Flat}" Margin="0,0,8,0"/>
+        <Button x:Name="BtnRun" Content="{Binding RunLabel}"
+                Style="{StaticResource Button.Primary}"
+                IsEnabled="{Binding IsValid}"/>
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Window>

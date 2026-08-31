@@ -70,6 +70,9 @@ DEFAULT_SETTINGS = {
     "spec_check_settings": {},
     "model_check_settings": {},
     "mep_param_transfer_settings": {},
+    # «Расход из пространства»: имена параметров, префиксы систем и
+    # список слов-исключений. Заполняется окном инструмента.
+    "space_airflow_settings": {},
     # Таблица правил для инструмента «Инструменты меток».
     # Каждое правило — словарь:
     #   cat        — имя BuiltInCategory элемента (напр. "OST_DuctTerminal")
