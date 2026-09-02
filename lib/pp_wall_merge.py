@@ -79,12 +79,56 @@ def _param_id(element, bip):
     return None
 
 
+def element_name(element):
+    u"""Имя элемента: сначала параметр, `.Name` — в последнюю очередь.
+
+    Прямое `element.Name` на системных типах Revit (`WallType`, `PipeType`
+    и подобные) бросает `AttributeError: Name`. Порядок чтения — как принято
+    в плагине: встроенные параметры имени типа, затем дескриптор базового
+    `Element`, и только потом само свойство.
+    """
+    if element is None:
+        return u""
+
+    for name in (u"ALL_MODEL_TYPE_NAME", u"SYMBOL_NAME_PARAM"):
+        try:
+            param = element.get_Parameter(getattr(BuiltInParameter, name))
+
+            if param is not None and param.HasValue:
+                value = param.AsString()
+
+                if value:
+                    return value
+        except Exception:
+            pass
+
+    for reader in (u"GetValue", u"__get__"):
+        try:
+            func = getattr(Element.Name, reader)
+        except Exception:
+            continue
+
+        for args in ((element,), (element, type(element))):
+            try:
+                value = func(*args)
+
+                if value:
+                    return value
+            except Exception:
+                pass
+
+    try:
+        return element.Name
+    except Exception:
+        return u""
+
+
 def wall_title(wall):
     u"""«Стена АР_380 · id 1234567» — как кусок называется в отчёте."""
     name = u"Стена"
 
     try:
-        name = wall.WallType.Name
+        name = element_name(wall.WallType) or name
     except Exception:
         pass
 
@@ -95,10 +139,7 @@ def wall_title(wall):
 
 
 def type_title(wall_type):
-    try:
-        return wall_type.Name
-    except Exception:
-        return u"Тип стены"
+    return element_name(wall_type) or u"Тип стены"
 
 
 # ======================================================================

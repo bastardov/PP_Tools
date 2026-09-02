@@ -117,7 +117,7 @@ def build_type_options(sets):
             key = unicode(wall_type.Id.IntegerValue)
 
             if key not in seen:
-                seen[key] = wall_type.Name
+                seen[key] = pp_wall_merge.element_name(wall_type)
 
     for key in sorted(seen.keys(), key=lambda k: seen[k]):
         options.append({u"key": key, u"title": seen[key]})
