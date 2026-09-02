@@ -147,17 +147,17 @@ class Piece(object):
     Revit разбил грань стены на несколько частей или в ней есть отверстие.
     """
 
-    def __init__(self, wall, base_level, faces):
+    def __init__(self, wall, base_level, faces, patches=None):
         self.wall = wall
         self.id = wall.Id
         self.base_level = base_level
-        self.faces = faces
+        self.faces = faces + list(patches or [])
 
         us = []
         vs = []
         area = 0.0
 
-        for loops in faces:
+        for loops in self.faces:
             signed = 0.0
 
             for loop in loops:
@@ -167,7 +167,8 @@ class Piece(object):
 
                 signed += _signed_area(loop)
 
-            area += abs(signed)
+            if loops in faces:
+                area += abs(signed)
 
         self.u0 = min(us)
         self.u1 = max(us)
@@ -555,6 +556,47 @@ def wall_contours(wall):
         return None, u"ошибка чтения геометрии: {}".format(ex)
 
 
+def _insert_boxes(doc, wall):
+    u"""Габариты проёмов стены — по ним контур зарастает обратно.
+
+    Контур грани приходит УЖЕ с вырезом под окно или дверь. Если объединять
+    как есть, в новой стене на месте проёма не будет материала, и вставленная
+    заново дверь ничего не вырежет — Revit ругается «Экземпляры ничего не
+    вырезают». Поэтому проёмы заращиваем: они будут врезаны заново.
+    """
+    boxes = []
+
+    try:
+        inserts = wall.FindInserts(True, True, True, True)
+
+        if inserts is None:
+            return boxes
+
+        for insert_id in inserts:
+            element = doc.GetElement(insert_id)
+
+            if element is None:
+                continue
+
+            box = element.get_BoundingBox(None)
+
+            if box is None:
+                continue
+
+            corners = []
+
+            for x in (box.Min.X, box.Max.X):
+                for y in (box.Min.Y, box.Max.Y):
+                    for z in (box.Min.Z, box.Max.Z):
+                        corners.append(XYZ(x, y, z))
+
+            boxes.append(corners)
+    except Exception:
+        pass
+
+    return boxes
+
+
 def _is_rectilinear(faces):
     u"""Все контуры состоят только из горизонталей и вертикалей."""
     for loops in faces:
@@ -679,7 +721,9 @@ def _prepare(wall, doc, move_inserts):
         round(offset * FT_MM, 0)
     )
 
-    return key, (wall, line, direction, base_level, faces), None
+    boxes = _insert_boxes(doc, wall) if move_inserts else []
+
+    return key, (wall, line, direction, base_level, faces, boxes), None
 
 
 def _plane_sets(items):
@@ -693,14 +737,40 @@ def _plane_sets(items):
 
     pieces = []
 
-    for wall, _line, _dir, base_level, faces in items:
+    for wall, _line, _dir, base_level, faces, boxes in items:
         flat = []
 
         for loops in faces:
             flat.append([[(along(point), point.Z) for point in loop]
                          for loop in loops])
 
-        pieces.append(Piece(wall, base_level, flat))
+        limits = []
+
+        for loops in flat:
+            for loop in loops:
+                limits.extend(loop)
+
+        patches = []
+
+        if limits and boxes:
+            wall_u0 = min(u for u, _v in limits)
+            wall_u1 = max(u for u, _v in limits)
+            wall_v0 = min(v for _u, v in limits)
+            wall_v1 = max(v for _u, v in limits)
+
+            for corners in boxes:
+                us = [along(point) for point in corners]
+                vs = [point.Z for point in corners]
+
+                u0 = max(min(us), wall_u0)
+                u1 = min(max(us), wall_u1)
+                v0 = max(min(vs), wall_v0)
+                v1 = min(max(vs), wall_v1)
+
+                if u1 - u0 > TOL and v1 - v0 > TOL:
+                    patches.append([[(u0, v0), (u1, v0), (u1, v1), (u0, v1)]])
+
+        pieces.append(Piece(wall, base_level, flat, patches))
 
     return _build_sets(pieces, origin, direction)
 
@@ -1195,6 +1265,7 @@ def _restore_inserts(doc, wall, records, level):
                 instance.flipHand()
 
             _write_params(instance, record[u"params"])
+            doc.Regenerate()
 
             done += 1
         except Exception as ex:
