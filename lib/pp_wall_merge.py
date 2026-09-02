@@ -332,10 +332,13 @@ def _reason_not_mergeable(doc, wall, faces, move_inserts):
                 element = doc.GetElement(insert_id)
 
                 if not isinstance(element, FamilyInstance):
-                    return u"в стене есть вырез или ниша — перенести нельзя"
+                    return (u"переносить умею только окна и двери, а в стене "
+                            u"есть {} — её вставить заново нечем".format(
+                                _insert_label(element, insert_id)))
 
                 if not isinstance(element.Location, LocationPoint):
-                    return u"проём без точки вставки — перенести нельзя"
+                    return u"у проёма {} нет точки вставки".format(
+                        _insert_label(element, insert_id))
     except Exception:
         pass
 
@@ -554,6 +557,26 @@ def wall_contours(wall):
         return result, None
     except Exception as ex:
         return None, u"ошибка чтения геометрии: {}".format(ex)
+
+
+def _insert_label(element, insert_id):
+    u"""Назвать вставку, которую нельзя перенести, — чтобы было видно, что мешает."""
+    kind = u"вставка"
+
+    try:
+        if isinstance(element, Wall):
+            kind = u"встроенная стена или витраж"
+        elif isinstance(element, Opening):
+            kind = u"прямоугольный проём (вырез)"
+        elif element.Category is not None:
+            kind = element.Category.Name
+    except Exception:
+        pass
+
+    try:
+        return u"{} · id {}".format(kind, insert_id.IntegerValue)
+    except Exception:
+        return kind
 
 
 def _insert_boxes(doc, wall):
@@ -917,7 +940,8 @@ def _build_sets(pieces, origin, direction):
             if len(component) < 2:
                 rejects.append(Reject(
                     wall_title(component[0].wall),
-                    u"рядом нет второго куска в той же плоскости"
+                    u"в выделении не нашлось второго куска в той же "
+                    u"плоскости — возможно, он отсеян по причине выше"
                 ))
                 continue
 
