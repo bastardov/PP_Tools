@@ -254,8 +254,20 @@ try:
         success.append(u"  • Набор {} · {}".format(index + 1, mset.describe()))
 
     moved = sum(mset.moved_inserts for mset in done)
+    cut = sum(mset.embedded_cut for mset in done)
+
+    notes = []
+
+    for mset in done:
+        notes.extend(mset.embedded_notes)
 
     success.append(u"")
+
+    if cut:
+        success.append(
+            u"Витражей врезано в объединённую стену: {}. "
+            u"Проверьте их на виде.".format(cut)
+        )
 
     if moved:
         success.append(
@@ -282,12 +294,19 @@ try:
         for line in errors:
             warning.append(u"  • {}".format(line))
 
+    if notes:
+        warning.append(u"")
+        warning.append(u"Витражи:")
+
+        for line in notes:
+            warning.append(u"  • {}".format(line))
+
     pp_settings.show_report(
         None,
         TOOL_TITLE,
         u"\n".join(success),
         u"\n".join(warning),
-        bool(rejects or errors)
+        bool(rejects or errors or notes)
     )
 
 except Stop:

@@ -220,6 +220,8 @@ class MergeSet(object):
         self.area = area                # фут²
         self.master = max(pieces, key=lambda p: p.area)
         self.moved_inserts = 0
+        self.embedded_cut = 0
+        self.embedded_notes = []
 
         # Имя типа запоминаем сразу: в отчёте описание набора читается уже
         # после того, как исходные куски удалены.
@@ -324,17 +326,23 @@ def _reason_not_mergeable(doc, wall, faces, move_inserts):
         inserts = wall.FindInserts(True, True, True, True)
 
         if inserts is not None and inserts.Count > 0:
-            if not move_inserts:
-                return (u"в стене есть проёмы — включите «Переносить проёмы» "
-                        u"в окне инструмента")
-
             for insert_id in inserts:
                 element = doc.GetElement(insert_id)
+
+                # Встроенная стена (витраж) — самостоятельный элемент: он не
+                # удаляется вместе с host-стеной. Оставляем его на месте и
+                # врезаем в объединённую стену после создания.
+                if isinstance(element, Wall):
+                    continue
 
                 if not isinstance(element, FamilyInstance):
                     return (u"переносить умею только окна и двери, а в стене "
                             u"есть {} — её вставить заново нечем".format(
                                 _insert_label(element, insert_id)))
+
+                if not move_inserts:
+                    return (u"в стене есть проёмы — включите «Переносить проёмы» "
+                            u"в окне инструмента")
 
                 if not isinstance(element.Location, LocationPoint):
                     return u"у проёма {} нет точки вставки".format(
@@ -579,7 +587,7 @@ def _insert_label(element, insert_id):
         return kind
 
 
-def _insert_boxes(doc, wall):
+def _insert_boxes(doc, wall, move_inserts):
     u"""Габариты проёмов стены — по ним контур зарастает обратно.
 
     Контур грани приходит УЖЕ с вырезом под окно или дверь. Если объединять
@@ -599,6 +607,11 @@ def _insert_boxes(doc, wall):
             element = doc.GetElement(insert_id)
 
             if element is None:
+                continue
+
+            # Витраж заращиваем всегда: его след всё равно надо закрыть, чтобы
+            # контур не распался. Окна и двери — только когда их переносим.
+            if not isinstance(element, Wall) and not move_inserts:
                 continue
 
             box = element.get_BoundingBox(None)
@@ -744,7 +757,7 @@ def _prepare(wall, doc, move_inserts):
         round(offset * FT_MM, 0)
     )
 
-    boxes = _insert_boxes(doc, wall) if move_inserts else []
+    boxes = _insert_boxes(doc, wall, move_inserts)
 
     return key, (wall, line, direction, base_level, faces, boxes), None
 
@@ -1260,6 +1273,68 @@ def _read_inserts(doc, pieces):
     return records
 
 
+def _embedded_walls(doc, pieces):
+    u"""Встроенные стены и витражи. Их не удаляем и не пересоздаём."""
+    own = set()
+
+    for piece in pieces:
+        try:
+            own.add(piece.id.IntegerValue)
+        except Exception:
+            pass
+
+    found = []
+    seen = set()
+
+    for piece in pieces:
+        try:
+            inserts = piece.wall.FindInserts(True, True, True, True)
+        except Exception:
+            continue
+
+        if inserts is None:
+            continue
+
+        for insert_id in inserts:
+            try:
+                number = insert_id.IntegerValue
+
+                if number in own or number in seen:
+                    continue
+
+                element = doc.GetElement(insert_id)
+
+                if isinstance(element, Wall):
+                    seen.add(number)
+                    found.append(element)
+            except Exception:
+                pass
+
+    return found
+
+
+def _cut_embedded(doc, wall, embedded):
+    u"""Врезать витражи в новую стену. Возврат: (сколько вышло, замечания)."""
+    done = 0
+    notes = []
+
+    for other in embedded:
+        try:
+            SolidSolidCutUtils.AddCutBetweenSolids(doc, wall, other)
+            done += 1
+        except Exception as ex:
+            notes.append(u"{} — врезать не вышло ({}). Проверьте вручную: "
+                         u"«Изменить» → «Вырезать геометрию».".format(
+                             wall_title(other), ex))
+
+    try:
+        doc.Regenerate()
+    except Exception:
+        pass
+
+    return done, notes
+
+
 def _restore_inserts(doc, wall, records, level):
     u"""Вставить проёмы в новую стену. Возврат: (сколько вышло, что не вышло)."""
     done = 0
@@ -1380,6 +1455,7 @@ def merge(doc, mset, wall_type, move_inserts=False):
     wall_type_id = wall_type.Id
 
     inserts = _read_inserts(doc, mset.pieces) if move_inserts else []
+    embedded = _embedded_walls(doc, mset.pieces)
 
     victims = List[ElementId]()
 
@@ -1418,6 +1494,11 @@ def merge(doc, mset, wall_type, move_inserts=False):
                 )
             except Exception:
                 pass
+
+    if embedded:
+        mset.embedded_cut, mset.embedded_notes = _cut_embedded(
+            doc, new_wall, embedded
+        )
 
     if inserts:
         done, failed = _restore_inserts(doc, new_wall, inserts, level)
