@@ -134,6 +134,9 @@ def build_rows(sets, rejects):
             u"bad": False
         })
 
+        for line in mset.piece_rows():
+            rows.append({u"text": u"        \u21b3 {}".format(line), u"bad": False})
+
     for reject in rejects:
         rows.append({
             u"text": u"Не получится · {}".format(reject.describe()),

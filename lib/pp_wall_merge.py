@@ -225,6 +225,20 @@ class MergeSet(object):
             v
         )
 
+    def piece_rows(self):
+        u"""Строки по каждому куску — видно, из чего собрался контур."""
+        rows = []
+
+        for piece in sorted(self.pieces, key=lambda p: (p.v0, p.u0)):
+            rows.append(u"{} · длина {} м · низ {}, верх {}".format(
+                wall_title(piece.wall),
+                _num((piece.u1 - piece.u0) * FT_M),
+                _num(piece.v0 * FT_M),
+                _num(piece.v1 * FT_M)
+            ))
+
+        return rows
+
     def describe(self):
         us = [u for u, _v in self.outline]
         vs = [v for _u, v in self.outline]
@@ -252,7 +266,7 @@ class MergeSet(object):
 #  Пригодность куска
 # ======================================================================
 
-def _reason_not_mergeable(wall):
+def _reason_not_mergeable(wall, face):
     u"""Почему стену нельзя объединять. None — можно."""
     try:
         if wall.CurtainGrid is not None:
@@ -298,18 +312,10 @@ def _reason_not_mergeable(wall):
         except Exception:
             pass
 
-    # Стена с отредактированным профилем имеет собственный эскиз. Свойство
-    # появилось не во всех сборках API, поэтому проверка мягкая.
-    try:
-        sketch_id = wall.SketchId
-
-        if sketch_id is not None and sketch_id != ElementId.InvalidElementId:
-            return u"у стены изменён профиль"
-    except Exception:
-        pass
-
-    if _looks_rectangular(wall) is False:
-        return u"у стены изменён профиль или сложная геометрия"
+    # Модуль считает кусок прямоугольником. Если грань стены не прямоугольная
+    # (сложный отредактированный профиль), объединённый контур получится не тот.
+    if face is not None and _face_is_rectangle(face) is False:
+        return u"грань стены не прямоугольная (сложный профиль)"
 
     try:
         loc = wall.Location
@@ -325,14 +331,8 @@ def _reason_not_mergeable(wall):
     return None
 
 
-def _looks_rectangular(wall):
-    u"""True — грань стены прямоугольная. None — определить не удалось.
-
-    Модуль считает каждый кусок прямоугольником (линия привязки + низ и верх).
-    Если у стены отредактирован профиль, это неправда, и объединённый контур
-    получится не тот. Свойство SketchId есть не во всех сборках API, поэтому
-    форму дополнительно проверяем по самой большой грани стены.
-    """
+def _biggest_face(wall):
+    u"""Самая большая грань стены, смотрящая наружу или внутрь. None — нет."""
     try:
         options = Options()
         options.ComputeReferences = False
@@ -361,10 +361,15 @@ def _looks_rectangular(wall):
                 if best is None or face.Area > best.Area:
                     best = face
 
-        if best is None:
-            return None
+        return best
+    except Exception:
+        return None
 
-        loops = best.EdgeLoops
+
+def _face_is_rectangle(face):
+    u"""True/False, либо None — если проверить не вышло."""
+    try:
+        loops = face.EdgeLoops
 
         if loops.Size != 1:
             return False
@@ -374,8 +379,28 @@ def _looks_rectangular(wall):
         return None
 
 
+def _face_points(face):
+    u"""Точки контура грани в мировых координатах. None — не вышло."""
+    points = []
+
+    try:
+        loop = face.EdgeLoops.get_Item(0)
+
+        for edge in loop:
+            for point in edge.Tessellate():
+                points.append(point)
+    except Exception:
+        return None
+
+    return points or None
+
+
 def _vertical_range(wall, doc):
-    u"""(низ, верх, уровень базы) в абсолютных отметках. None — не вышло."""
+    u"""(низ, верх) по параметрам стены. Запасной путь, если нет геометрии.
+
+    Параметрам верить нельзя, когда у стены отредактирован профиль: они
+    описывают зависимости, а не реальное тело. Поэтому это именно фолбэк.
+    """
     base_id = _param_id(wall, BuiltInParameter.WALL_BASE_CONSTRAINT)
     base_level = doc.GetElement(base_id) if base_id is not None else None
 
@@ -395,7 +420,7 @@ def _vertical_range(wall, doc):
     if top_z - base_z < TOL:
         return None
 
-    return base_z, top_z, base_level
+    return base_z, top_z
 
 
 def _plan_direction(line):
@@ -467,14 +492,26 @@ def plan(doc, walls):
 
 def _prepare(wall, doc):
     u"""Разобрать одну стену. Возврат: (ключ плоскости, данные, причина отказа)."""
-    reason = _reason_not_mergeable(wall)
+    face = _biggest_face(wall)
+
+    reason = _reason_not_mergeable(wall, face)
 
     if reason:
         return None, None, reason
 
+    base_id = _param_id(wall, BuiltInParameter.WALL_BASE_CONSTRAINT)
+    base_level = doc.GetElement(base_id) if base_id is not None else None
+
+    if not isinstance(base_level, Level):
+        return None, None, u"у стены не задан базовый уровень"
+
+    # Габариты куска снимаем с РЕАЛЬНОЙ грани: параметры «низ/верх» врут,
+    # если у стены отредактирован профиль (перемычка над проёмом — как раз
+    # такой случай: по параметрам она от пола до потолка).
+    points = _face_points(face) if face is not None else None
     vertical = _vertical_range(wall, doc)
 
-    if vertical is None:
+    if points is None and vertical is None:
         return None, None, u"не удалось определить низ и верх"
 
     line = wall.Location.Curve
@@ -492,7 +529,7 @@ def _prepare(wall, doc):
         round(offset * FT_MM, 0)
     )
 
-    return key, (wall, line, direction, vertical), None
+    return key, (wall, line, direction, base_level, points, vertical), None
 
 
 def _plane_sets(items):
@@ -500,18 +537,24 @@ def _plane_sets(items):
     origin = items[0][1].GetEndPoint(0)
     direction = items[0][2]
 
+    def along(point):
+        return ((point.X - origin.X) * direction.X +
+                (point.Y - origin.Y) * direction.Y)
+
     pieces = []
 
-    for wall, line, _dir, vertical in items:
-        base_z, top_z, base_level = vertical
+    for wall, line, _dir, base_level, points, vertical in items:
+        if points:
+            us = [along(point) for point in points]
+            vs = [point.Z for point in points]
+            u0, u1 = min(us), max(us)
+            v0, v1 = min(vs), max(vs)
+        else:
+            u0 = along(line.GetEndPoint(0))
+            u1 = along(line.GetEndPoint(1))
+            v0, v1 = vertical
 
-        a = line.GetEndPoint(0)
-        b = line.GetEndPoint(1)
-
-        u_a = (a.X - origin.X) * direction.X + (a.Y - origin.Y) * direction.Y
-        u_b = (b.X - origin.X) * direction.X + (b.Y - origin.Y) * direction.Y
-
-        pieces.append(Piece(wall, base_level, u_a, u_b, base_z, top_z))
+        pieces.append(Piece(wall, base_level, u0, u1, v0, v1))
 
     sets = []
     rejects = []
