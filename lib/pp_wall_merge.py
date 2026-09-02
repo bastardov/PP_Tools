@@ -151,6 +151,10 @@ class MergeSet(object):
         self.area = area                # фут²
         self.master = max(pieces, key=lambda p: p.area)
 
+        # Имя типа запоминаем сразу: в отчёте описание набора читается уже
+        # после того, как исходные куски удалены.
+        self.type_name = type_title(self.master.wall.WallType)
+
     @property
     def normal(self):
         u"""Единичная нормаль к плоскости стены в плане."""
@@ -182,7 +186,7 @@ class MergeSet(object):
     def describe(self):
         parts = [
             u"{} {}".format(len(self.pieces), plural_walls(len(self.pieces))),
-            type_title(self.master.wall.WallType),
+            self.type_name,
             u"{} м²".format(_num(self.area * FT2_M2))
         ]
 
@@ -379,76 +383,111 @@ def plan(doc, walls):
     groups = {}
 
     for wall in walls:
-        reason = _reason_not_mergeable(wall)
+        try:
+            key, item, reason = _prepare(wall, doc)
+        except Exception as ex:
+            rejects.append(Reject(
+                wall_title(wall),
+                u"не удалось разобрать стену: {}".format(ex)
+            ))
+            continue
 
         if reason:
             rejects.append(Reject(wall_title(wall), reason))
             continue
 
-        vertical = _vertical_range(wall, doc)
-
-        if vertical is None:
-            rejects.append(Reject(wall_title(wall), u"не удалось определить низ и верх"))
-            continue
-
-        line = wall.Location.Curve
-        direction = _plan_direction(line)
-
-        if direction is None:
-            rejects.append(Reject(wall_title(wall), u"нулевая длина стены"))
-            continue
-
-        p0 = line.GetEndPoint(0)
-        offset = p0.X * (-direction.Y) + p0.Y * direction.X
-
-        key = (
-            round(direction.X, 4),
-            round(direction.Y, 4),
-            round(offset * FT_MM, 0)
-        )
-
-        groups.setdefault(key, []).append((wall, line, direction, vertical))
+        groups.setdefault(key, []).append(item)
 
     sets = []
 
     for key in sorted(groups.keys()):
-        items = groups[key]
+        try:
+            found, failed = _plane_sets(groups[key])
+        except Exception as ex:
+            rejects.append(Reject(
+                u"{} {}".format(len(groups[key]), plural_walls(len(groups[key]))),
+                u"не удалось собрать контур: {}".format(ex)
+            ))
+            continue
 
-        origin = items[0][1].GetEndPoint(0)
-        direction = items[0][2]
+        sets.extend(found)
+        rejects.extend(failed)
 
-        pieces = []
+    return sets, rejects
 
-        for wall, line, _dir, vertical in items:
-            base_z, top_z, base_level = vertical
 
-            a = line.GetEndPoint(0)
-            b = line.GetEndPoint(1)
+def _prepare(wall, doc):
+    u"""Разобрать одну стену. Возврат: (ключ плоскости, данные, причина отказа)."""
+    reason = _reason_not_mergeable(wall)
 
-            u_a = (a.X - origin.X) * direction.X + (a.Y - origin.Y) * direction.Y
-            u_b = (b.X - origin.X) * direction.X + (b.Y - origin.Y) * direction.Y
+    if reason:
+        return None, None, reason
 
-            pieces.append(Piece(wall, base_level, u_a, u_b, base_z, top_z))
+    vertical = _vertical_range(wall, doc)
 
-        for component in _components(pieces):
-            if len(component) < 2:
-                rejects.append(Reject(
-                    wall_title(component[0].wall),
-                    u"рядом нет второго куска в той же плоскости"
-                ))
-                continue
+    if vertical is None:
+        return None, None, u"не удалось определить низ и верх"
 
-            outline, area, error = _outline(component)
+    line = wall.Location.Curve
+    direction = _plan_direction(line)
 
-            if outline is None:
-                titles = u", ".join([wall_title(p.wall) for p in component])
-                rejects.append(Reject(
-                    u"{} {}: {}".format(len(component), plural_walls(len(component)), titles),
-                    error
-                ))
-                continue
+    if direction is None:
+        return None, None, u"нулевая длина стены"
 
-            sets.append(MergeSet(component, origin, direction, outline, area))
+    p0 = line.GetEndPoint(0)
+    offset = p0.X * (-direction.Y) + p0.Y * direction.X
+
+    key = (
+        round(direction.X, 4),
+        round(direction.Y, 4),
+        round(offset * FT_MM, 0)
+    )
+
+    return key, (wall, line, direction, vertical), None
+
+
+def _plane_sets(items):
+    u"""Собрать наборы внутри одной плоскости. Возврат: (sets, rejects)."""
+    origin = items[0][1].GetEndPoint(0)
+    direction = items[0][2]
+
+    pieces = []
+
+    for wall, line, _dir, vertical in items:
+        base_z, top_z, base_level = vertical
+
+        a = line.GetEndPoint(0)
+        b = line.GetEndPoint(1)
+
+        u_a = (a.X - origin.X) * direction.X + (a.Y - origin.Y) * direction.Y
+        u_b = (b.X - origin.X) * direction.X + (b.Y - origin.Y) * direction.Y
+
+        pieces.append(Piece(wall, base_level, u_a, u_b, base_z, top_z))
+
+    sets = []
+    rejects = []
+
+    for component in _components(pieces):
+        if len(component) < 2:
+            rejects.append(Reject(
+                wall_title(component[0].wall),
+                u"рядом нет второго куска в той же плоскости"
+            ))
+            continue
+
+        outline, area, error = _outline(component)
+
+        if outline is None:
+            titles = u", ".join([wall_title(p.wall) for p in component])
+            rejects.append(Reject(
+                u"{} {}: {}".format(
+                    len(component), plural_walls(len(component)), titles
+                ),
+                error
+            ))
+            continue
+
+        sets.append(MergeSet(component, origin, direction, outline, area))
 
     return sets, rejects
 

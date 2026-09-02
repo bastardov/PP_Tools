@@ -14,6 +14,7 @@ except Exception: pass
 
 import os
 import sys
+import traceback
 
 import clr
 
@@ -279,9 +280,18 @@ except OperationCanceledException:
     pass
 
 except Exception as ex:
+    details = u""
+
+    try:
+        details = unicode(traceback.format_exc())
+    except Exception:
+        pass
+
     pp_wpf.show_report(
-        unicode(ex),
+        u"{}\n\n{}".format(unicode(ex), details).strip(),
         title=u"Ошибка",
         subtitle=TOOL_TITLE,
-        is_error=True
+        is_error=True,
+        monospace=True,
+        width=900
     )
