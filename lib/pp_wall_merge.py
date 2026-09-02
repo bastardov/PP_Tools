@@ -567,6 +567,46 @@ def wall_contours(wall):
         return None, u"ошибка чтения геометрии: {}".format(ex)
 
 
+def _box_corners(element):
+    u"""Восемь углов габарита элемента в мировых координатах.
+
+    У BoundingBoxXYZ есть собственный Transform, и он не всегда единичный —
+    без него углы уезжают, заращивание промахивается мимо проёма, и Revit
+    потом ругается «Экземпляры ничего не вырезают».
+    """
+    try:
+        box = element.get_BoundingBox(None)
+
+        if box is None:
+            return None
+
+        transform = None
+
+        try:
+            transform = box.Transform
+        except Exception:
+            transform = None
+
+        corners = []
+
+        for x in (box.Min.X, box.Max.X):
+            for y in (box.Min.Y, box.Max.Y):
+                for z in (box.Min.Z, box.Max.Z):
+                    point = XYZ(x, y, z)
+
+                    if transform is not None:
+                        try:
+                            point = transform.OfPoint(point)
+                        except Exception:
+                            pass
+
+                    corners.append(point)
+
+        return corners
+    except Exception:
+        return None
+
+
 def _insert_label(element, insert_id):
     u"""Назвать вставку, которую нельзя перенести, — чтобы было видно, что мешает."""
     kind = u"вставка"
@@ -614,19 +654,10 @@ def _insert_boxes(doc, wall, move_inserts):
             if not isinstance(element, Wall) and not move_inserts:
                 continue
 
-            box = element.get_BoundingBox(None)
+            corners = _box_corners(element)
 
-            if box is None:
-                continue
-
-            corners = []
-
-            for x in (box.Min.X, box.Max.X):
-                for y in (box.Min.Y, box.Max.Y):
-                    for z in (box.Min.Z, box.Max.Z):
-                        corners.append(XYZ(x, y, z))
-
-            boxes.append(corners)
+            if corners:
+                boxes.append(corners)
     except Exception:
         pass
 
@@ -798,10 +829,14 @@ def _plane_sets(items):
                 us = [along(point) for point in corners]
                 vs = [point.Z for point in corners]
 
-                u0 = max(min(us), wall_u0)
-                u1 = min(max(us), wall_u1)
-                v0 = max(min(vs), wall_v0)
-                v1 = min(max(vs), wall_v1)
+                # Небольшой запас: габарит проёма и вырез в стене совпадают
+                # не идеально, а тонкая недозакрашенная щель ломает всё.
+                margin = 20.0 / FT_MM
+
+                u0 = max(min(us) - margin, wall_u0)
+                u1 = min(max(us) + margin, wall_u1)
+                v0 = max(min(vs) - margin, wall_v0)
+                v1 = min(max(vs) + margin, wall_v1)
 
                 if u1 - u0 > TOL and v1 - v0 > TOL:
                     patches.append([[(u0, v0), (u1, v0), (u1, v1), (u0, v1)]])
@@ -1262,6 +1297,7 @@ def _read_inserts(doc, pieces):
                     u"facing": element.FacingFlipped,
                     u"hand": element.HandFlipped,
                     u"params": _read_params(element),
+                    u"corners": _box_corners(element),
                     u"title": u"{} · id {}".format(
                         element_name(element.Symbol) or u"проём",
                         insert_id.IntegerValue
@@ -1333,6 +1369,39 @@ def _cut_embedded(doc, wall, embedded):
         pass
 
     return done, notes
+
+
+def _uncovered_inserts(mset, records):
+    u"""Проёмы, чьё место не попало в контур объединённой стены.
+
+    Дешевле поймать это здесь, чем получить от Revit «Экземпляры ничего не
+    вырезают» в середине транзакции: там уже не видно, о каком проёме речь.
+    """
+    problems = []
+
+    origin = mset.origin
+    direction = mset.direction
+
+    for record in records:
+        corners = record.get(u"corners")
+
+        if not corners:
+            continue
+
+        us = [((point.X - origin.X) * direction.X +
+               (point.Y - origin.Y) * direction.Y) for point in corners]
+        vs = [point.Z for point in corners]
+
+        middle_u = (min(us) + max(us)) / 2.0
+        middle_v = (min(vs) + max(vs)) / 2.0
+
+        if not _point_in(mset.outline, middle_u, middle_v):
+            problems.append(u"{} (низ {}, верх {} м)".format(
+                record.get(u"title", u"проём"),
+                _num(min(vs) * FT_M), _num(max(vs) * FT_M)
+            ))
+
+    return problems
 
 
 def _restore_inserts(doc, wall, records, level):
@@ -1501,6 +1570,15 @@ def merge(doc, mset, wall_type, move_inserts=False):
         )
 
     if inserts:
+        gaps = _uncovered_inserts(mset, inserts)
+
+        if gaps:
+            raise Exception(
+                u"объединённая стена не накрывает проёмы: {}".format(
+                    u"; ".join(gaps)
+                )
+            )
+
         done, failed = _restore_inserts(doc, new_wall, inserts, level)
         mset.moved_inserts = done
 
