@@ -151,6 +151,7 @@ class Piece(object):
         self.wall = wall
         self.id = wall.Id
         self.base_level = base_level
+        self.patch_count = len(patches or [])
         self.faces = faces + list(patches or [])
 
         us = []
@@ -1396,10 +1397,20 @@ def _uncovered_inserts(mset, records):
         middle_v = (min(vs) + max(vs)) / 2.0
 
         if not _point_in(mset.outline, middle_u, middle_v):
-            problems.append(u"{} (низ {}, верх {} м)".format(
-                record.get(u"title", u"проём"),
-                _num(min(vs) * FT_M), _num(max(vs) * FT_M)
-            ))
+            outline_us = [u for u, _v in mset.outline]
+            outline_vs = [v for _u, v in mset.outline]
+
+            problems.append(
+                u"{}: середина по стене {} м, по высоте {} м; "
+                u"контур по стене {}…{} м, по высоте {}…{} м; "
+                u"заращено проёмов в наборе: {}".format(
+                    record.get(u"title", u"проём"),
+                    _num(middle_u * FT_M), _num(middle_v * FT_M),
+                    _num(min(outline_us) * FT_M), _num(max(outline_us) * FT_M),
+                    _num(min(outline_vs) * FT_M), _num(max(outline_vs) * FT_M),
+                    sum(piece.patch_count for piece in mset.pieces)
+                )
+            )
 
     return problems
 
