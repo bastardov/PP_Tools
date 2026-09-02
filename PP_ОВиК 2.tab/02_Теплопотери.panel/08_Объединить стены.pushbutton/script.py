@@ -257,9 +257,11 @@ try:
     cut = sum(mset.embedded_cut for mset in done)
 
     notes = []
+    foreign = []
 
     for mset in done:
         notes.extend(mset.embedded_notes)
+        foreign.extend(mset.foreign_notes)
 
     success.append(u"")
 
@@ -301,12 +303,23 @@ try:
         for line in notes:
             warning.append(u"  • {}".format(line))
 
+    if foreign:
+        warning.append(u"")
+        warning.append(
+            u"Проёмы соседних стен — они прорезали объединённые куски насквозь, "
+            u"но принадлежат другой стене. Заново не создавались; проверьте, "
+            u"режут ли они объединённую стену:"
+        )
+
+        for line in foreign:
+            warning.append(u"  • {}".format(line))
+
     pp_settings.show_report(
         None,
         TOOL_TITLE,
         u"\n".join(success),
         u"\n".join(warning),
-        bool(rejects or errors or notes)
+        bool(rejects or errors or notes or foreign)
     )
 
 except Stop:

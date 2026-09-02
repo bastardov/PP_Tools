@@ -232,6 +232,7 @@ class MergeSet(object):
         self.moved_inserts = 0
         self.embedded_cut = 0
         self.embedded_notes = []
+        self.foreign_notes = []
 
         # Имя типа запоминаем сразу: в отчёте описание набора читается уже
         # после того, как исходные куски удалены.
@@ -349,6 +350,9 @@ def _reason_not_mergeable(doc, wall, faces, move_inserts):
                     return (u"переносить умею только окна и двери, а в стене "
                             u"есть {} — её вставить заново нечем".format(
                                 _insert_label(element, insert_id)))
+
+                if not _is_own_insert(element, wall):
+                    continue
 
                 if not move_inserts:
                     return (u"в стене есть проёмы — включите «Переносить проёмы» "
@@ -659,9 +663,12 @@ def _insert_boxes(doc, wall, move_inserts):
             if element is None:
                 continue
 
-            # Витраж заращиваем всегда: его след всё равно надо закрыть, чтобы
-            # контур не распался. Окна и двери — только когда их переносим.
-            if not isinstance(element, Wall) and not move_inserts:
+            # Витраж и чужой проём заращиваем всегда: их след надо закрыть,
+            # иначе контур распадётся. Свои окна и двери — только когда их
+            # переносим.
+            if (not isinstance(element, Wall)
+                    and _is_own_insert(element, wall)
+                    and not move_inserts):
                 continue
 
             corners = _box_corners(element)
@@ -1292,6 +1299,62 @@ def _create_wall(doc, mset, wall_type_id, level, facing):
     raise Exception(u"Revit не принял контур объединения: {}".format(last_error))
 
 
+def _is_own_insert(element, wall):
+    u"""Проём принадлежит именно этой стене, а не соседней.
+
+    FindInserts с includeSharedEmbeddedInserts возвращает и проёмы соседних
+    стен, которые прорезают нашу насквозь (типовая связка «кирпич + вентфасад»).
+    Создавать их заново нельзя: получится дубль окна, висящий не в своей стене,
+    и Revit скажет «Экземпляры … ничего не вырезают».
+    """
+    try:
+        host = element.Host
+
+        if host is None:
+            return False
+
+        return host.Id.IntegerValue == wall.Id.IntegerValue
+    except Exception:
+        return False
+
+
+def _foreign_inserts(doc, pieces):
+    u"""Проёмы соседних стен, прорезающие наши куски. Их не пересоздаём."""
+    notes = []
+    seen = set()
+
+    for piece in pieces:
+        try:
+            inserts = piece.wall.FindInserts(True, True, True, True)
+        except Exception:
+            continue
+
+        if inserts is None:
+            continue
+
+        for insert_id in inserts:
+            try:
+                number = insert_id.IntegerValue
+
+                if number in seen:
+                    continue
+
+                element = doc.GetElement(insert_id)
+
+                if not isinstance(element, FamilyInstance):
+                    continue
+
+                if _is_own_insert(element, piece.wall):
+                    continue
+
+                seen.add(number)
+                notes.append(_insert_label(element, insert_id))
+            except Exception:
+                pass
+
+    return notes
+
+
 def _read_inserts(doc, pieces):
     u"""Снимок окон и дверей: Revit не умеет менять хост, только вставить заново."""
     records = []
@@ -1310,6 +1373,9 @@ def _read_inserts(doc, pieces):
                 element = doc.GetElement(insert_id)
 
                 if not isinstance(element, FamilyInstance):
+                    continue
+
+                if not _is_own_insert(element, piece.wall):
                     continue
 
                 location = element.Location
@@ -1632,6 +1698,7 @@ def merge(doc, mset, wall_type, move_inserts=False):
 
     inserts = _read_inserts(doc, mset.pieces) if move_inserts else []
     embedded = _embedded_walls(doc, mset.pieces)
+    mset.foreign_notes = _foreign_inserts(doc, mset.pieces)
 
     victims = List[ElementId]()
 
