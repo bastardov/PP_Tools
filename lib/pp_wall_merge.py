@@ -26,6 +26,7 @@ v — абсолютная отметка Z. Оба значения в фута
 import math
 
 from Autodesk.Revit.DB import *
+from Autodesk.Revit.DB.Structure import StructuralType
 from System.Collections.Generic import List
 
 
@@ -217,6 +218,7 @@ class MergeSet(object):
         self.outline = outline          # [(u, v), ...] замкнутый контур
         self.area = area                # фут²
         self.master = max(pieces, key=lambda p: p.area)
+        self.moved_inserts = 0
 
         # Имя типа запоминаем сразу: в отчёте описание набора читается уже
         # после того, как исходные куски удалены.
@@ -291,7 +293,7 @@ class MergeSet(object):
 #  Пригодность куска
 # ======================================================================
 
-def _reason_not_mergeable(wall, faces):
+def _reason_not_mergeable(doc, wall, faces, move_inserts):
     u"""Почему стену нельзя объединять. None — можно."""
     try:
         if wall.CurtainGrid is not None:
@@ -321,7 +323,18 @@ def _reason_not_mergeable(wall, faces):
         inserts = wall.FindInserts(True, True, True, True)
 
         if inserts is not None and inserts.Count > 0:
-            return u"в стене есть проёмы (окно, дверь, ниша)"
+            if not move_inserts:
+                return (u"в стене есть проёмы — включите «Переносить проёмы» "
+                        u"в окне инструмента")
+
+            for insert_id in inserts:
+                element = doc.GetElement(insert_id)
+
+                if not isinstance(element, FamilyInstance):
+                    return u"в стене есть вырез или ниша — перенести нельзя"
+
+                if not isinstance(element.Location, LocationPoint):
+                    return u"проём без точки вставки — перенести нельзя"
     except Exception:
         pass
 
@@ -591,14 +604,14 @@ def _plan_direction(line):
 #  Разбор выделения
 # ======================================================================
 
-def plan(doc, walls):
+def plan(doc, walls, move_inserts=False):
     u"""Разложить выделенные стены на наборы. Возврат: (sets, rejects)."""
     rejects = []
     groups = {}
 
     for wall in walls:
         try:
-            key, item, reason = _prepare(wall, doc)
+            key, item, reason = _prepare(wall, doc, move_inserts)
         except Exception as ex:
             rejects.append(Reject(
                 wall_title(wall),
@@ -630,14 +643,14 @@ def plan(doc, walls):
     return sets, rejects
 
 
-def _prepare(wall, doc):
+def _prepare(wall, doc, move_inserts):
     u"""Разобрать одну стену. Возврат: (ключ плоскости, данные, причина отказа)."""
     # Контуры берём с РЕАЛЬНОЙ геометрии. Параметрам «низ/верх» верить нельзя:
     # у перемычки над проёмом они говорят «от пола до уровня выше», хотя тело
     # только над окном. Смещения к тому же относительные и у каждого куска свои.
     faces, problem = wall_contours(wall)
 
-    reason = _reason_not_mergeable(wall, faces)
+    reason = _reason_not_mergeable(doc, wall, faces, move_inserts)
 
     if reason:
         return None, None, reason
@@ -1028,6 +1041,15 @@ def _read_params(source):
             pass
 
     try:
+        src = source.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)
+
+        if src is not None and src.HasValue:
+            extra.append((BuiltInParameter.ALL_MODEL_MARK,
+                          StorageType.String, src.AsString() or u""))
+    except Exception:
+        pass
+
+    try:
         src = source.get_Parameter(BuiltInParameter.ELEM_PARTITION_PARAM)
 
         if src is not None and src.HasValue:
@@ -1101,6 +1123,86 @@ def _create_wall(doc, mset, wall_type_id, level, facing):
     raise Exception(u"Revit не принял контур объединения: {}".format(last_error))
 
 
+def _read_inserts(doc, pieces):
+    u"""Снимок окон и дверей: Revit не умеет менять хост, только вставить заново."""
+    records = []
+
+    for piece in pieces:
+        try:
+            inserts = piece.wall.FindInserts(True, True, True, True)
+        except Exception:
+            continue
+
+        if inserts is None:
+            continue
+
+        for insert_id in inserts:
+            try:
+                element = doc.GetElement(insert_id)
+
+                if not isinstance(element, FamilyInstance):
+                    continue
+
+                location = element.Location
+
+                if not isinstance(location, LocationPoint):
+                    continue
+
+                records.append({
+                    u"symbol": element.Symbol,
+                    u"point": location.Point,
+                    u"level": doc.GetElement(element.LevelId),
+                    u"facing": element.FacingFlipped,
+                    u"hand": element.HandFlipped,
+                    u"params": _read_params(element),
+                    u"title": u"{} · id {}".format(
+                        element_name(element.Symbol) or u"проём",
+                        insert_id.IntegerValue
+                    )
+                })
+            except Exception:
+                pass
+
+    return records
+
+
+def _restore_inserts(doc, wall, records, level):
+    u"""Вставить проёмы в новую стену. Возврат: (сколько вышло, что не вышло)."""
+    done = 0
+    failed = []
+
+    for record in records:
+        try:
+            symbol = record[u"symbol"]
+
+            if not symbol.IsActive:
+                symbol.Activate()
+                doc.Regenerate()
+
+            host_level = record[u"level"] or level
+
+            instance = doc.Create.NewFamilyInstance(
+                record[u"point"], symbol, wall, host_level,
+                StructuralType.NonStructural
+            )
+
+            doc.Regenerate()
+
+            if instance.FacingFlipped != record[u"facing"]:
+                instance.flipFacing()
+
+            if instance.HandFlipped != record[u"hand"]:
+                instance.flipHand()
+
+            _write_params(instance, record[u"params"])
+
+            done += 1
+        except Exception as ex:
+            failed.append(u"{} — {}".format(record.get(u"title", u"проём"), ex))
+
+    return done, failed
+
+
 def _z_range(wall):
     u"""Фактические отметки низа и верха стены по габаритам. None — не вышло."""
     try:
@@ -1164,7 +1266,7 @@ def _enforce_height(doc, wall, mset, level):
         )
 
 
-def merge(doc, mset, wall_type):
+def merge(doc, mset, wall_type, move_inserts=False):
     u"""Создать объединённую стену вместо кусков набора.
 
     Вызывать внутри открытой транзакции (лучше — своей вложенной, чтобы
@@ -1181,6 +1283,8 @@ def merge(doc, mset, wall_type):
     want_offset = _center_offset(master, normal)
     snapshot = _read_params(master)
     wall_type_id = wall_type.Id
+
+    inserts = _read_inserts(doc, mset.pieces) if move_inserts else []
 
     victims = List[ElementId]()
 
@@ -1219,5 +1323,14 @@ def merge(doc, mset, wall_type):
                 )
             except Exception:
                 pass
+
+    if inserts:
+        done, failed = _restore_inserts(doc, new_wall, inserts, level)
+        mset.moved_inserts = done
+
+        if failed:
+            raise Exception(u"не удалось вставить проёмы: {}".format(
+                u"; ".join(failed)
+            ))
 
     return new_wall

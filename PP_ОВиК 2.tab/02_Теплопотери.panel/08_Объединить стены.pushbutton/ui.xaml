@@ -1,10 +1,10 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Объединить стены"
-        Width="680"
-        Height="700"
-        MinWidth="560"
-        MinHeight="520"
+        Width="700"
+        Height="760"
+        MinWidth="580"
+        MinHeight="560"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
@@ -20,7 +20,8 @@
   <Grid Margin="20">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>              <!-- заголовок -->
-      <RowDefinition Height="*" MinHeight="240"/> <!-- разбор выделения -->
+      <RowDefinition Height="*" MinHeight="220"/> <!-- разбор выделения -->
+      <RowDefinition Height="Auto"/>              <!-- проёмы -->
       <RowDefinition Height="Auto"/>              <!-- тип стены -->
       <RowDefinition Height="Auto"/>              <!-- итог -->
       <RowDefinition Height="Auto"/>              <!-- разделитель -->
@@ -47,7 +48,7 @@
 
       <TextBlock Grid.Row="1" Style="{StaticResource Caption}"
                  Margin="0,4,0,6" TextWrapping="Wrap"
-                 Text="Список только для просмотра: объединятся все наборы из него. Строки цвета предупреждения объединить не получится — причина написана в строке."/>
+                 Text="Список только для просмотра: объединятся все наборы из него. Под набором перечислены его куски с размерами. Строки цвета предупреждения объединить не получится — причина написана в строке."/>
 
       <Border Grid.Row="2" Style="{StaticResource Card}">
         <Grid>
@@ -69,8 +70,23 @@
       </Border>
     </Grid>
 
-    <!-- ===== Тип объединённой стены ===== -->
+    <!-- ===== Проёмы ===== -->
     <StackPanel Grid.Row="2" Margin="0,14,0,0">
+      <TextBlock Style="{StaticResource FieldLabel}" Text="СТЕНЫ С ОКНАМИ И ДВЕРЯМИ"/>
+
+      <Border Style="{StaticResource Card}" Margin="0,6,0,0">
+        <StackPanel Margin="14,12,14,12">
+          <CheckBox x:Name="ChkMoveInserts"
+                    Style="{StaticResource PP.CheckBox}"
+                    Content="Переносить проёмы на объединённую стену"/>
+          <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                     Text="Без галочки стена с окном или дверью не объединяется. С галочкой окна и двери вставляются в новую стену заново — Revit не умеет менять им хост. Параметры проекта, марка, фаза и рабочий набор переносятся; марки-выноски на видах и размеры, привязанные к этим окнам, пропадут."/>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+
+    <!-- ===== Тип объединённой стены ===== -->
+    <StackPanel Grid.Row="3" Margin="0,14,0,0">
       <TextBlock Style="{StaticResource FieldLabel}" Text="ТИП ОБЪЕДИНЁННОЙ СТЕНЫ"/>
       <ComboBox x:Name="CmbType" Style="{StaticResource PP.ComboBox}"
                 Margin="0,6,0,0"
@@ -80,7 +96,7 @@
     </StackPanel>
 
     <!-- ===== Итог ===== -->
-    <Border Grid.Row="3" Style="{StaticResource Card.Result}" Margin="0,14,0,0">
+    <Border Grid.Row="4" Style="{StaticResource Card.Result}" Margin="0,14,0,0">
       <StackPanel>
         <TextBlock Style="{StaticResource FieldLabel}" Text="ЧТО ПРОИЗОЙДЁТ ПОСЛЕ НАЖАТИЯ"/>
         <TextBlock Style="{StaticResource Body.Result}"
@@ -91,9 +107,9 @@
     </Border>
 
     <!-- ===== Подвал ===== -->
-    <Border Grid.Row="4" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+    <Border Grid.Row="5" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
 
-    <Grid Grid.Row="5" Margin="0,12,0,0">
+    <Grid Grid.Row="6" Margin="0,12,0,0">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/>
         <ColumnDefinition Width="Auto"/>

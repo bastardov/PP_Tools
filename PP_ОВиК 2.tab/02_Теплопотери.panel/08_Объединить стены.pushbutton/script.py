@@ -157,38 +157,43 @@ try:
             u"Нечего объединять"
         )
 
-    sets, rejects = pp_wall_merge.plan(doc, walls)
+    # Галочка «Переносить проёмы» меняет сам разбор, поэтому окно умеет
+    # попросить пересчитать его. Транзакции здесь нет — чтение безопасно.
+    state = {u"sets": [], u"rejects": [], u"move": False}
 
-    if not sets:
-        lines = [u"Ни один набор объединить не получилось."]
+    def replan(move_inserts):
+        found, failed = pp_wall_merge.plan(doc, walls, move_inserts)
 
-        if rejects:
-            lines.append(u"")
-            lines.append(u"Причины:")
+        state[u"sets"] = found
+        state[u"rejects"] = failed
+        state[u"move"] = bool(move_inserts)
 
-            for reject in rejects:
-                lines.append(u"  • {}".format(reject.describe()))
+        return {
+            u"rows": build_rows(found, failed),
+            u"types": build_type_options(found),
+            u"sets_count": len(found),
+            u"walls_count": sum(len(mset.pieces) for mset in found),
+            u"reject_count": len(failed)
+        }
 
-        lines.append(u"")
-        lines.append(
-            u"Объединяются только обычные стены без проёмов, лежащие в одной "
-            u"плоскости и касающиеся друг друга."
+    data = replan(False)
+
+    if not data[u"sets_count"] and not data[u"reject_count"]:
+        fail(
+            u"В выделении нет обычных стен.\n\n"
+            u"Выделите куски одной стены — простенок и перемычку над проёмом "
+            u"или сегменты в ряд — и запустите инструмент заново.",
+            u"Нечего объединять"
         )
 
-        fail(u"\n".join(lines), u"Нечего объединять")
-
-    merge_walls = sum(len(mset.pieces) for mset in sets)
-
-    options = ask_options(
-        build_rows(sets, rejects),
-        build_type_options(sets),
-        len(sets),
-        merge_walls,
-        len(rejects)
-    )
+    options = ask_options(data, replan)
 
     if options is None:
         raise Stop()
+
+    sets = state[u"sets"]
+    rejects = state[u"rejects"]
+    move_inserts = bool(options.get(u"move_inserts"))
 
     chosen_key = options.get(u"type_key", u"auto")
     chosen_type = None
@@ -214,7 +219,7 @@ try:
             sub.Start()
 
             try:
-                pp_wall_merge.merge(doc, mset, wall_type)
+                pp_wall_merge.merge(doc, mset, wall_type, move_inserts)
                 sub.Commit()
                 done.append(mset)
             except Exception as ex:
@@ -248,7 +253,16 @@ try:
     for index, mset in enumerate(done):
         success.append(u"  • Набор {} · {}".format(index + 1, mset.describe()))
 
+    moved = sum(mset.moved_inserts for mset in done)
+
     success.append(u"")
+
+    if moved:
+        success.append(
+            u"Проёмов вставлено заново: {}. Параметры проекта, марка, фаза и "
+            u"рабочий набор у них сохранены; марки-выноски на видах — нет.".format(moved)
+        )
+
     success.append(u"Пользовательские параметры перенесены с самого большого куска.")
     success.append(u"Если результат не устроил — отмена по Ctrl+Z.")
 

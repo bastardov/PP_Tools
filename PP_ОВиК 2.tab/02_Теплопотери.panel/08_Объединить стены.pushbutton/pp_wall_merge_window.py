@@ -2,17 +2,21 @@
 u"""Окно инструмента «Объединить стены» (панель «Теплопотери»).
 
 Окно ничего не знает про Revit: скрипт разбирает выделение сам и передаёт сюда
-готовые строки разбора и список типов.
+готовые строки разбора и список типов. Галочка «Переносить проёмы» меняет сам
+разбор, поэтому окно умеет попросить скрипт пересчитать его — через колбэк
+`replan(move_inserts)`, который отдаёт новый словарь того же вида.
 
     from pp_wall_merge_window import ask_options
 
-    opts = ask_options(rows, types, sets_count, walls_count)
+    opts = ask_options(replan(False), replan)
 
     if opts is None:
         ...                      # пользователь закрыл окно
     else:
         opts[u"type_key"]        # u"auto" либо строка с id типа стены
+        opts[u"move_inserts"]    # bool
 
+Словарь разбора: rows, types, sets_count, walls_count, reject_count.
 rows  — [{u"text": u"Набор 1 · 3 стены · …", u"bad": False}, …]
 types — [{u"key": u"auto", u"title": u"Автоматически — …"}, …]
 """
@@ -50,19 +54,18 @@ def plural_sets(count):
 
 
 class WallMergeVM(pp_wpf.Notifier):
-    u"""Состояние окна: считать нечего, всё решено до открытия."""
+    u"""Состояние окна: считает скрипт, окно только показывает."""
 
-    def __init__(self, sets_count, walls_count, reject_count):
+    def __init__(self, data):
         pp_wpf.Notifier.__init__(self)
 
-        self.sets_count = int(sets_count or 0)
-        self.walls_count = int(walls_count or 0)
-        self.reject_count = int(reject_count or 0)
-
+        self.move_inserts = False
         self.type_key = u"auto"
 
-        self._status = self._build_status()
+        self._status = u""
         self._status_error = False
+
+        self.apply(data)
 
     # -- свойства для биндингов -------------------------------------
     @property
@@ -78,10 +81,15 @@ class WallMergeVM(pp_wpf.Notifier):
         if not self.sets_count:
             return u"Объединять нечего: в выделении нет двух кусков одной стены."
 
-        return u"Из {} {} получится {} {}.".format(
+        text = u"Из {} {} получится {} {}.".format(
             self.walls_count, plural_walls(self.walls_count),
             self.sets_count, plural_walls(self.sets_count)
         )
+
+        if self.move_inserts:
+            text += u" Окна и двери будут вставлены заново."
+
+        return text
 
     @property
     def ResultBrush(self):
@@ -96,6 +104,19 @@ class WallMergeVM(pp_wpf.Notifier):
             return Application.Current.Resources[key]
         except Exception:
             return None
+
+    # -- изменения ---------------------------------------------------
+    def apply(self, data):
+        u"""Принять свежий разбор от скрипта."""
+        self.sets_count = int(data.get(u"sets_count", 0))
+        self.walls_count = int(data.get(u"walls_count", 0))
+        self.reject_count = int(data.get(u"reject_count", 0))
+
+        self._status = self._build_status()
+        self._status_error = False
+
+        self.notify(u"Status", u"StatusBrush", u"ResultText",
+                    u"ResultBrush", u"IsValid")
 
     def _build_status(self):
         if not self.sets_count and not self.reject_count:
@@ -113,9 +134,12 @@ class WallMergeVM(pp_wpf.Notifier):
 
         return u" · ".join(parts)
 
-    # -- изменения из окна ------------------------------------------
     def set_type_key(self, key):
         self.type_key = key
+
+    def set_move_inserts(self, value):
+        self.move_inserts = bool(value)
+        self.notify(u"ResultText")
 
     def set_error(self, message):
         self._status = unicode(message or u"")
@@ -123,34 +147,43 @@ class WallMergeVM(pp_wpf.Notifier):
         self.notify(u"Status", u"StatusBrush")
 
     def result(self):
-        return {u"type_key": self.type_key}
+        return {
+            u"type_key": self.type_key,
+            u"move_inserts": self.move_inserts
+        }
 
 
 class WallMergeWindow(object):
     u"""Загрузка разметки, подписки, модальный показ."""
 
-    def __init__(self, rows, types, sets_count, walls_count, reject_count):
+    def __init__(self, data, replan):
         xaml_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             u"ui.xaml"
         )
 
         self.window = pp_wpf.load_window_file(xaml_path)
-        self.vm = WallMergeVM(sets_count, walls_count, reject_count)
-        self.types = list(types or [])
+        self.vm = WallMergeVM(data)
+        self.replan = replan
+        self.types = []
         self.window.DataContext = self.vm
         self.accepted = False
 
-        self._fill_plan(rows or [])
-        self._fill_types()
+        self._show(data)
         self._wire()
         self._select_type()
 
         pp_wpf.set_owner(self.window)
         pp_wpf.fit_to_screen(self.window)
 
+    # -- наполнение --------------------------------------------------
+    def _show(self, data):
+        self._fill_plan(data.get(u"rows") or [])
+        self._fill_types(data.get(u"types") or [])
+
     def _fill_plan(self, rows):
         lst = self.window.FindName("LstPlan")
+        lst.Items.Clear()
 
         hot = self._brush(u"Hot")
         ink = self._brush(u"Ink")
@@ -167,25 +200,40 @@ class WallMergeWindow(object):
 
             lst.Items.Add(block)
 
-        if not rows:
-            lst.Visibility = Visibility.Collapsed
-            self.window.FindName("TxtEmpty").Visibility = Visibility.Visible
+        empty = self.window.FindName("TxtEmpty")
 
-    def _fill_types(self):
+        lst.Visibility = Visibility.Collapsed if not rows else Visibility.Visible
+        empty.Visibility = Visibility.Visible if not rows else Visibility.Collapsed
+
+    def _fill_types(self, types):
+        self.types = list(types)
+
         combo = self.window.FindName("CmbType")
+        combo.Items.Clear()
 
         for item in self.types:
             combo.Items.Add(item.get(u"title", u""))
 
         combo.IsEnabled = len(self.types) > 1
 
-    def _select_type(self):
+    def _select_type(self, key=None):
         u"""Начальный выбор — отдельным шагом после подписок (см. UI.md)."""
         combo = self.window.FindName("CmbType")
 
-        if self.types:
-            combo.SelectedIndex = 0
-            self.vm.set_type_key(self.types[0].get(u"key", u"auto"))
+        if not self.types:
+            self.vm.set_type_key(u"auto")
+            return
+
+        index = 0
+
+        if key is not None:
+            for position, item in enumerate(self.types):
+                if item.get(u"key") == key:
+                    index = position
+                    break
+
+        combo.SelectedIndex = index
+        self.vm.set_type_key(self.types[index].get(u"key", u"auto"))
 
     def _brush(self, key):
         try:
@@ -193,6 +241,7 @@ class WallMergeWindow(object):
         except Exception:
             return None
 
+    # -- подписки ----------------------------------------------------
     def _wire(self):
         find = self.window.FindName
         guarded = pp_wpf.guard(self.vm.set_error)
@@ -205,6 +254,11 @@ class WallMergeWindow(object):
                 self.vm.set_type_key(self.types[index].get(u"key", u"auto"))
 
         @guarded
+        def on_inserts(sender, args):
+            self.vm.set_move_inserts(sender.IsChecked)
+            self._refresh()
+
+        @guarded
         def on_run(sender, args):
             self._accept()
 
@@ -213,6 +267,11 @@ class WallMergeWindow(object):
             self.window.Close()
 
         find("CmbType").SelectionChanged += on_type
+
+        check = find("ChkMoveInserts")
+        check.Checked += on_inserts
+        check.Unchecked += on_inserts
+
         find("BtnRun").Click += on_run
         find("BtnCancel").Click += on_cancel
 
@@ -221,6 +280,18 @@ class WallMergeWindow(object):
             on_accept=self._accept,
             on_cancel=self.window.Close
         )
+
+    def _refresh(self):
+        u"""Галочка меняет сам разбор — просим скрипт пересчитать."""
+        if self.replan is None:
+            return
+
+        keep = self.vm.type_key
+        data = self.replan(self.vm.move_inserts)
+
+        self._show(data)
+        self.vm.apply(data)
+        self._select_type(keep)
 
     def _accept(self):
         if not self.vm.IsValid:
@@ -238,8 +309,6 @@ class WallMergeWindow(object):
         return self.vm.result()
 
 
-def ask_options(rows, types, sets_count, walls_count, reject_count=0):
+def ask_options(data, replan=None):
     u"""Показать окно. Возврат: словарь настроек или None, если отменили."""
-    return WallMergeWindow(
-        rows, types, sets_count, walls_count, reject_count
-    ).show()
+    return WallMergeWindow(data, replan).show()
