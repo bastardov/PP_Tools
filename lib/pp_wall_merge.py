@@ -33,6 +33,8 @@ FT_MM = 304.8                 # миллиметров в футе
 TOL = 1.0 / FT_MM             # 1 мм в футах — общий допуск склейки
 FT2_M2 = 0.09290304           # фут² -> м²
 FT_M = 0.3048                 # фут -> м
+V_TOL = 5.0 / 304.8           # 5 мм — расхождение по высоте, которое терпим
+V_FAIL = 50.0 / 304.8         # 50 мм — дальше набор считаем непостроенным
 
 
 # ======================================================================
@@ -150,10 +152,11 @@ def type_title(wall_type):
 class Piece(object):
     u"""Кусок стены в системе координат набора."""
 
-    def __init__(self, wall, base_level, u0, u1, v0, v1):
+    def __init__(self, wall, base_level, u0, u1, v0, v1, source=u"грань"):
         self.wall = wall
         self.id = wall.Id
         self.base_level = base_level
+        self.source = source
         self.u0 = min(u0, u1)
         self.u1 = max(u0, u1)
         self.v0 = min(v0, v1)
@@ -230,11 +233,12 @@ class MergeSet(object):
         rows = []
 
         for piece in sorted(self.pieces, key=lambda p: (p.v0, p.u0)):
-            rows.append(u"{} · длина {} м · низ {}, верх {}".format(
+            rows.append(u"{} · длина {} м · низ {}, верх {} · по {}".format(
                 wall_title(piece.wall),
                 _num((piece.u1 - piece.u0) * FT_M),
                 _num(piece.v0 * FT_M),
-                _num(piece.v1 * FT_M)
+                _num(piece.v1 * FT_M),
+                piece.source
             ))
 
         return rows
@@ -331,6 +335,29 @@ def _reason_not_mergeable(wall, face):
     return None
 
 
+def _solids(geometry, depth=0):
+    u"""Тела из GeometryElement, разворачивая вложенные экземпляры."""
+    found = []
+
+    if geometry is None or depth > 2:
+        return found
+
+    for item in geometry:
+        if isinstance(item, Solid):
+            try:
+                if item.Faces.Size > 0:
+                    found.append(item)
+            except Exception:
+                pass
+        elif isinstance(item, GeometryInstance):
+            try:
+                found.extend(_solids(item.GetInstanceGeometry(), depth + 1))
+            except Exception:
+                pass
+
+    return found
+
+
 def _biggest_face(wall):
     u"""Самая большая грань стены, смотрящая наружу или внутрь. None — нет."""
     try:
@@ -342,10 +369,7 @@ def _biggest_face(wall):
         facing = wall.Orientation
         best = None
 
-        for item in wall.get_Geometry(options):
-            if not isinstance(item, Solid):
-                continue
-
+        for item in _solids(wall.get_Geometry(options)):
             for face in item.Faces:
                 if not isinstance(face, PlanarFace):
                     continue
@@ -549,12 +573,14 @@ def _plane_sets(items):
             vs = [point.Z for point in points]
             u0, u1 = min(us), max(us)
             v0, v1 = min(vs), max(vs)
+            source = u"грани"
         else:
             u0 = along(line.GetEndPoint(0))
             u1 = along(line.GetEndPoint(1))
             v0, v1 = vertical
+            source = u"параметрам"
 
-        pieces.append(Piece(wall, base_level, u0, u1, v0, v1))
+        pieces.append(Piece(wall, base_level, u0, u1, v0, v1, source))
 
     sets = []
     rejects = []
@@ -966,6 +992,69 @@ def _create_wall(doc, mset, wall_type_id, level, facing):
     raise Exception(u"Revit не принял контур объединения: {}".format(last_error))
 
 
+def _z_range(wall):
+    u"""Фактические отметки низа и верха стены по габаритам. None — не вышло."""
+    try:
+        box = wall.get_BoundingBox(None)
+    except Exception:
+        return None
+
+    if box is None:
+        return None
+
+    return box.Min.Z, box.Max.Z
+
+
+def _enforce_height(doc, wall, mset, level):
+    u"""Сверить высоту готовой стены с контуром и поправить параметрами.
+
+    «Смещение снизу» и «Смещение сверху» в Revit относительные: они считаются
+    от уровней, и у каждого куска свои. Складывать или копировать их нельзя —
+    именно на этом объединение и разъезжается. Поэтому итог проверяется не по
+    параметрам, а по фактическим габаритам созданной стены.
+    """
+    want0 = min(v for _u, v in mset.outline)
+    want1 = max(v for _u, v in mset.outline)
+
+    got = _z_range(wall)
+
+    if got is None:
+        return
+
+    if abs(got[0] - want0) <= V_TOL and abs(got[1] - want1) <= V_TOL:
+        return
+
+    # Развязываем верх от уровня и задаём отметки напрямую.
+    for bip, value in (
+        (BuiltInParameter.WALL_HEIGHT_TYPE, ElementId.InvalidElementId),
+        (BuiltInParameter.WALL_BASE_CONSTRAINT, level.Id),
+        (BuiltInParameter.WALL_BASE_OFFSET, want0 - level.Elevation),
+        (BuiltInParameter.WALL_USER_HEIGHT_PARAM, want1 - want0),
+    ):
+        try:
+            param = wall.get_Parameter(bip)
+
+            if param is not None and not param.IsReadOnly:
+                param.Set(value)
+        except Exception:
+            pass
+
+    doc.Regenerate()
+
+    got = _z_range(wall)
+
+    if got is None:
+        return
+
+    if abs(got[0] - want0) > V_FAIL or abs(got[1] - want1) > V_FAIL:
+        raise Exception(
+            u"высота не сошлась: нужно {}…{} м, получилось {}…{} м".format(
+                _num(want0 * FT_M), _num(want1 * FT_M),
+                _num(got[0] * FT_M), _num(got[1] * FT_M)
+            )
+        )
+
+
 def merge(doc, mset, wall_type):
     u"""Создать объединённую стену вместо кусков набора.
 
@@ -1003,6 +1092,8 @@ def merge(doc, mset, wall_type):
             doc.Regenerate()
     except Exception:
         pass
+
+    _enforce_height(doc, new_wall, mset, level)
 
     # Стена рождается по осевой; если исходные стояли по грани, сдвигаем
     # новую на ту же среднюю плоскость, что была у самого большого куска.
