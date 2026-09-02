@@ -386,11 +386,51 @@ def _same_point(a, b):
             abs(a.Z - b.Z) <= TOL)
 
 
-def _face_loops(face):
-    u"""Контуры грани в мировых координатах. None — разобрать не вышло."""
-    loops = []
+def _clean_loop(points):
+    u"""Убрать повторы и замыкающую точку."""
+    while len(points) > 1 and _same_point(points[0], points[-1]):
+        points.pop()
 
+    return points if len(points) >= 3 else None
+
+
+def _loops_by_curves(face):
+    u"""Контуры через GetEdgesAsCurveLoops — основной путь."""
     try:
+        result = []
+
+        for loop in face.GetEdgesAsCurveLoops():
+            points = []
+
+            for curve in loop:
+                if not isinstance(curve, Line):
+                    return None, u"в контуре грани есть кривая"
+
+                point = curve.GetEndPoint(0)
+
+                if points and _same_point(points[-1], point):
+                    continue
+
+                points.append(point)
+
+            cleaned = _clean_loop(points)
+
+            if cleaned:
+                result.append(cleaned)
+
+        if result:
+            return result, None
+
+        return None, u"GetEdgesAsCurveLoops не дал контуров"
+    except Exception as ex:
+        return None, u"GetEdgesAsCurveLoops: {}".format(ex)
+
+
+def _loops_by_edges(face):
+    u"""Контуры через EdgeLoops — запасной путь."""
+    try:
+        result = []
+
         for loop in face.EdgeLoops:
             points = []
 
@@ -406,15 +446,36 @@ def _face_loops(face):
 
                     points.append(point)
 
-            while len(points) > 1 and _same_point(points[0], points[-1]):
-                points.pop()
+            cleaned = _clean_loop(points)
 
-            if len(points) >= 3:
-                loops.append(points)
-    except Exception:
-        return None
+            if cleaned:
+                result.append(cleaned)
 
-    return loops or None
+        if result:
+            return result, None
+
+        return None, u"EdgeLoops не дал контуров"
+    except Exception as ex:
+        return None, u"EdgeLoops: {}".format(ex)
+
+
+def _face_loops(face):
+    u"""Контуры грани. Возврат: (контуры, причина отказа).
+
+    Причина возвращается текстом, а не глотается: на этом уже потеряли два
+    круга отладки.
+    """
+    problem = u"неизвестно"
+
+    for reader in (_loops_by_curves, _loops_by_edges):
+        loops, trouble = reader(face)
+
+        if loops:
+            return loops, None
+
+        problem = trouble or problem
+
+    return None, problem
 
 
 def wall_contours(wall):
@@ -469,10 +530,10 @@ def wall_contours(wall):
         result = []
 
         for face in best[1]:
-            loops = _face_loops(face)
+            loops, problem = _face_loops(face)
 
             if loops is None:
-                return None, u"не удалось разобрать контур грани"
+                return None, u"не удалось разобрать контур грани ({})".format(problem)
 
             result.append(loops)
 
