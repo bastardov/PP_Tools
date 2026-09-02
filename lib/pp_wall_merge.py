@@ -32,6 +32,7 @@ from System.Collections.Generic import List
 FT_MM = 304.8                 # миллиметров в футе
 TOL = 1.0 / FT_MM             # 1 мм в футах — общий допуск склейки
 FT2_M2 = 0.09290304           # фут² -> м²
+FT_M = 0.3048                 # фут -> м
 
 
 # ======================================================================
@@ -225,10 +226,17 @@ class MergeSet(object):
         )
 
     def describe(self):
+        us = [u for u, _v in self.outline]
+        vs = [v for _u, v in self.outline]
+
         parts = [
             u"{} {}".format(len(self.pieces), plural_walls(len(self.pieces))),
             self.type_name,
-            u"{} м²".format(_num(self.area * FT2_M2))
+            u"{} м²".format(_num(self.area * FT2_M2)),
+            u"длина {} м".format(_num((max(us) - min(us)) * FT_M)),
+            u"низ {}, верх {}".format(
+                _num(min(vs) * FT_M), _num(max(vs) * FT_M)
+            )
         ]
 
         if self.mixed_types:
