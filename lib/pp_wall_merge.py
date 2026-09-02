@@ -150,21 +150,23 @@ def type_title(wall_type):
 # ======================================================================
 
 class Piece(object):
-    u"""Кусок стены в системе координат набора."""
+    u"""Кусок стены: контур грани в системе координат набора."""
 
-    def __init__(self, wall, base_level, u0, u1, v0, v1, source=u"грань"):
+    def __init__(self, wall, base_level, polygon, source=u"грани"):
         self.wall = wall
         self.id = wall.Id
         self.base_level = base_level
         self.source = source
-        self.u0 = min(u0, u1)
-        self.u1 = max(u0, u1)
-        self.v0 = min(v0, v1)
-        self.v1 = max(v0, v1)
+        self.polygon = polygon
 
-    @property
-    def area(self):
-        return (self.u1 - self.u0) * (self.v1 - self.v0)
+        us = [u for u, _v in polygon]
+        vs = [v for _u, v in polygon]
+
+        self.u0 = min(us)
+        self.u1 = max(us)
+        self.v0 = min(vs)
+        self.v1 = max(vs)
+        self.area = _polygon_area(polygon)
 
     @property
     def type_id(self):
@@ -270,7 +272,7 @@ class MergeSet(object):
 #  Пригодность куска
 # ======================================================================
 
-def _reason_not_mergeable(wall, face):
+def _reason_not_mergeable(wall, points):
     u"""Почему стену нельзя объединять. None — можно."""
     try:
         if wall.CurtainGrid is not None:
@@ -316,10 +318,11 @@ def _reason_not_mergeable(wall, face):
         except Exception:
             pass
 
-    # Модуль считает кусок прямоугольником. Если грань стены не прямоугольная
-    # (сложный отредактированный профиль), объединённый контур получится не тот.
-    if face is not None and _face_is_rectangle(face) is False:
-        return u"грань стены не прямоугольная (сложный профиль)"
+    # Контур куска должен быть «ступенчатым»: только горизонтали и вертикали.
+    # Прямоугольник, Г, П и всё, что делает сам инструмент, сюда попадают;
+    # наклонные и скруглённые профили — нет.
+    if points is not None and not _is_rectilinear(points):
+        return u"контур грани не ступенчатый (наклонный или скруглённый профиль)"
 
     try:
         loc = wall.Location
@@ -390,33 +393,59 @@ def _biggest_face(wall):
         return None
 
 
-def _face_is_rectangle(face):
-    u"""True/False, либо None — если проверить не вышло."""
+def _same_point(a, b):
+    return (abs(a.X - b.X) <= TOL and
+            abs(a.Y - b.Y) <= TOL and
+            abs(a.Z - b.Z) <= TOL)
+
+
+def _face_polygon(face):
+    u"""Точки контура грани по порядку обхода. None — прочитать не вышло."""
     try:
         loops = face.EdgeLoops
 
         if loops.Size != 1:
-            return False
+            return None
 
-        return loops.get_Item(0).Size == 4
-    except Exception:
-        return None
+        points = []
 
+        for edge in loops.get_Item(0):
+            try:
+                chunk = edge.TessellateOnFace(face)
+            except Exception:
+                chunk = edge.Tessellate()
 
-def _face_points(face):
-    u"""Точки контура грани в мировых координатах. None — не вышло."""
-    points = []
+            for point in chunk:
+                if points and _same_point(points[-1], point):
+                    continue
 
-    try:
-        loop = face.EdgeLoops.get_Item(0)
-
-        for edge in loop:
-            for point in edge.Tessellate():
                 points.append(point)
+
+        while len(points) > 1 and _same_point(points[0], points[-1]):
+            points.pop()
+
+        return points if len(points) >= 4 else None
     except Exception:
         return None
 
-    return points or None
+
+def _is_rectilinear(points):
+    u"""Контур состоит только из горизонталей и вертикалей."""
+    count = len(points)
+
+    for index in range(count):
+        a = points[index]
+        b = points[(index + 1) % count]
+
+        if abs(a.Z - b.Z) <= TOL:
+            continue
+
+        if abs(a.X - b.X) <= TOL and abs(a.Y - b.Y) <= TOL:
+            continue
+
+        return False
+
+    return True
 
 
 def _vertical_range(wall, doc):
@@ -517,8 +546,12 @@ def plan(doc, walls):
 def _prepare(wall, doc):
     u"""Разобрать одну стену. Возврат: (ключ плоскости, данные, причина отказа)."""
     face = _biggest_face(wall)
+    points = _face_polygon(face) if face is not None else None
 
-    reason = _reason_not_mergeable(wall, face)
+    if face is not None and points is None:
+        return None, None, u"не удалось прочитать контур грани стены"
+
+    reason = _reason_not_mergeable(wall, points)
 
     if reason:
         return None, None, reason
@@ -529,10 +562,9 @@ def _prepare(wall, doc):
     if not isinstance(base_level, Level):
         return None, None, u"у стены не задан базовый уровень"
 
-    # Габариты куска снимаем с РЕАЛЬНОЙ грани: параметры «низ/верх» врут,
+    # Контур куска снимаем с РЕАЛЬНОЙ грани: параметры «низ/верх» врут,
     # если у стены отредактирован профиль (перемычка над проёмом — как раз
     # такой случай: по параметрам она от пола до потолка).
-    points = _face_points(face) if face is not None else None
     vertical = _vertical_range(wall, doc)
 
     if points is None and vertical is None:
@@ -569,95 +601,23 @@ def _plane_sets(items):
 
     for wall, line, _dir, base_level, points, vertical in items:
         if points:
-            us = [along(point) for point in points]
-            vs = [point.Z for point in points]
-            u0, u1 = min(us), max(us)
-            v0, v1 = min(vs), max(vs)
+            polygon = [(along(point), point.Z) for point in points]
             source = u"грани"
         else:
-            u0 = along(line.GetEndPoint(0))
-            u1 = along(line.GetEndPoint(1))
+            u_a = along(line.GetEndPoint(0))
+            u_b = along(line.GetEndPoint(1))
             v0, v1 = vertical
+
+            polygon = [
+                (min(u_a, u_b), v0), (max(u_a, u_b), v0),
+                (max(u_a, u_b), v1), (min(u_a, u_b), v1)
+            ]
             source = u"параметрам"
 
-        pieces.append(Piece(wall, base_level, u0, u1, v0, v1, source))
+        pieces.append(Piece(wall, base_level, polygon, source))
 
-    sets = []
-    rejects = []
+    return _build_sets(pieces, origin, direction)
 
-    for component in _components(pieces):
-        if len(component) < 2:
-            rejects.append(Reject(
-                wall_title(component[0].wall),
-                u"рядом нет второго куска в той же плоскости"
-            ))
-            continue
-
-        outline, area, error = _outline(component)
-
-        if outline is None:
-            titles = u", ".join([wall_title(p.wall) for p in component])
-            rejects.append(Reject(
-                u"{} {}: {}".format(
-                    len(component), plural_walls(len(component)), titles
-                ),
-                error
-            ))
-            continue
-
-        sets.append(MergeSet(component, origin, direction, outline, area))
-
-    return sets, rejects
-
-
-def _touch(a, b):
-    u"""Куски соприкасаются гранью (касание одним углом не считается)."""
-    over_u = min(a.u1, b.u1) - max(a.u0, b.u0)
-    over_v = min(a.v1, b.v1) - max(a.v0, b.v0)
-
-    if over_u < -TOL or over_v < -TOL:
-        return False
-
-    if over_u <= TOL and over_v <= TOL:
-        return False
-
-    return True
-
-
-def _components(pieces):
-    u"""Разбить куски одной плоскости на связные группы."""
-    count = len(pieces)
-    seen = [False] * count
-    result = []
-
-    for start in range(count):
-        if seen[start]:
-            continue
-
-        seen[start] = True
-        stack = [start]
-        found = [start]
-
-        while stack:
-            current = stack.pop()
-
-            for other in range(count):
-                if seen[other]:
-                    continue
-
-                if _touch(pieces[current], pieces[other]):
-                    seen[other] = True
-                    stack.append(other)
-                    found.append(other)
-
-        result.append([pieces[i] for i in sorted(found)])
-
-    return result
-
-
-# ======================================================================
-#  Объединение контуров
-# ======================================================================
 
 def _axis(values):
     u"""Отсортированные координаты сетки, близкие слиты в одну."""
@@ -671,19 +631,70 @@ def _axis(values):
     return result
 
 
-def _outline(pieces):
-    u"""Контур объединения прямоугольников. Возврат: (точки, площадь, ошибка)."""
-    us = _axis([p.u0 for p in pieces] + [p.u1 for p in pieces])
-    vs = _axis([p.v0 for p in pieces] + [p.v1 for p in pieces])
+def _polygon_area(polygon):
+    u"""Площадь замкнутого контура по формуле шнуровки."""
+    total = 0.0
+    count = len(polygon)
+
+    for index in range(count):
+        x0, y0 = polygon[index]
+        x1, y1 = polygon[(index + 1) % count]
+        total += x0 * y1 - x1 * y0
+
+    return abs(total) / 2.0
+
+
+def _point_in(polygon, x, y):
+    u"""Точка внутри контура (луч вправо, чётность пересечений)."""
+    inside = False
+    count = len(polygon)
+    j = count - 1
+
+    for i in range(count):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+
+        if (yi > y) != (yj > y):
+            cross = xi + (y - yi) * (xj - xi) / (yj - yi)
+
+            if x < cross:
+                inside = not inside
+
+        j = i
+
+    return inside
+
+
+def _titles(pieces):
+    return u"{} {}: {}".format(
+        len(pieces), plural_walls(len(pieces)),
+        u", ".join([wall_title(piece.wall) for piece in pieces])
+    )
+
+
+def _build_sets(pieces, origin, direction):
+    u"""Разложить куски плоскости на связные наборы и обвести их контуры.
+
+    Работает по общей сетке из всех координат контуров: клетка закрашена,
+    если её середина попала внутрь хотя бы одного куска. Так объединяются не
+    только прямоугольники, но и уже объединённые Г- и П-образные стены.
+    """
+    sets = []
+    rejects = []
+
+    us = _axis([u for piece in pieces for u, _v in piece.polygon])
+    vs = _axis([v for piece in pieces for _u, v in piece.polygon])
 
     nu = len(us) - 1
     nv = len(vs) - 1
 
     if nu < 1 or nv < 1:
-        return None, 0.0, u"куски вырождены в линию"
+        for piece in pieces:
+            rejects.append(Reject(wall_title(piece.wall), u"кусок вырожден в линию"))
 
-    cover = []
-    area = 0.0
+        return sets, rejects
+
+    owners = []
 
     for i in range(nu):
         column = []
@@ -691,67 +702,79 @@ def _outline(pieces):
 
         for j in range(nv):
             cv = (vs[j] + vs[j + 1]) / 2.0
-            filled = False
+            here = []
 
-            for piece in pieces:
+            for index, piece in enumerate(pieces):
                 if (piece.u0 - TOL <= cu <= piece.u1 + TOL and
-                        piece.v0 - TOL <= cv <= piece.v1 + TOL):
-                    filled = True
-                    break
+                        piece.v0 - TOL <= cv <= piece.v1 + TOL and
+                        _point_in(piece.polygon, cu, cv)):
+                    here.append(index)
 
-            column.append(filled)
+            column.append(here)
 
-            if filled:
+        owners.append(column)
+
+    seen = set()
+
+    for i0 in range(nu):
+        for j0 in range(nv):
+            if not owners[i0][j0] or (i0, j0) in seen:
+                continue
+
+            cells = []
+            stack = [(i0, j0)]
+            seen.add((i0, j0))
+
+            while stack:
+                i, j = stack.pop()
+                cells.append((i, j))
+
+                for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    ni = i + di
+                    nj = j + dj
+
+                    if (0 <= ni < nu and 0 <= nj < nv and owners[ni][nj]
+                            and (ni, nj) not in seen):
+                        seen.add((ni, nj))
+                        stack.append((ni, nj))
+
+            used = set()
+
+            for i, j in cells:
+                used.update(owners[i][j])
+
+            component = [pieces[index] for index in sorted(used)]
+
+            if len(component) < 2:
+                rejects.append(Reject(
+                    wall_title(component[0].wall),
+                    u"рядом нет второго куска в той же плоскости"
+                ))
+                continue
+
+            cover = [[False] * nv for _ in range(nu)]
+            area = 0.0
+
+            for i, j in cells:
+                cover[i][j] = True
                 area += (us[i + 1] - us[i]) * (vs[j + 1] - vs[j])
 
-        cover.append(column)
+            if _has_hole(cover, nu, nv):
+                rejects.append(Reject(
+                    _titles(component),
+                    u"внутри объединения остаётся дырка"
+                ))
+                continue
 
-    if not _single_body(cover, nu, nv):
-        return None, 0.0, u"куски не соприкасаются — это не одна стена"
+            outline, error = _trace(cover, us, vs, nu, nv)
 
-    if _has_hole(cover, nu, nv):
-        return None, 0.0, u"внутри объединения остаётся дырка"
+            if outline is None:
+                rejects.append(Reject(_titles(component), error))
+                continue
 
-    points, error = _trace(cover, us, vs, nu, nv)
+            sets.append(MergeSet(component, origin, direction, outline, area))
 
-    if points is None:
-        return None, 0.0, error
-
-    return points, area, None
-
-
-def _single_body(cover, nu, nv):
-    start = None
-
-    for i in range(nu):
-        for j in range(nv):
-            if cover[i][j]:
-                start = (i, j)
-                break
-
-        if start:
-            break
-
-    if start is None:
-        return False
-
-    seen = set([start])
-    stack = [start]
-
-    while stack:
-        i, j = stack.pop()
-
-        for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            ni = i + di
-            nj = j + dj
-
-            if 0 <= ni < nu and 0 <= nj < nv and cover[ni][nj] and (ni, nj) not in seen:
-                seen.add((ni, nj))
-                stack.append((ni, nj))
-
-    total = sum(1 for i in range(nu) for j in range(nv) if cover[i][j])
-
-    return len(seen) == total
+    return sets, rejects
 
 
 def _has_hole(cover, nu, nv):
