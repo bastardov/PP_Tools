@@ -152,6 +152,15 @@ class Piece(object):
         self.id = wall.Id
         self.base_level = base_level
         self.patch_count = len(patches or [])
+        self.patch_rects = []
+
+        for loops in (patches or []):
+            for loop in loops:
+                rect_us = [u for u, _v in loop]
+                rect_vs = [v for _u, v in loop]
+                self.patch_rects.append(
+                    (min(rect_us), max(rect_us), min(rect_vs), max(rect_vs))
+                )
         self.faces = faces + list(patches or [])
 
         us = []
@@ -803,44 +812,61 @@ def _plane_sets(items):
         return ((point.X - origin.X) * direction.X +
                 (point.Y - origin.Y) * direction.Y)
 
-    pieces = []
+    # Сначала контуры всех кусков — они задают общие границы плоскости.
+    shapes = []
+    limits = []
 
-    for wall, _line, _dir, base_level, faces, boxes in items:
+    for item in items:
+        faces = item[4]
         flat = []
 
         for loops in faces:
             flat.append([[(along(point), point.Z) for point in loop]
                          for loop in loops])
 
-        limits = []
+        shapes.append(flat)
 
         for loops in flat:
             for loop in loops:
                 limits.extend(loop)
 
+    if not limits:
+        return [], [Reject(wall_title(item[0]), u"пустой контур") for item in items]
+
+    plane_u0 = min(u for u, _v in limits)
+    plane_u1 = max(u for u, _v in limits)
+    plane_v0 = min(v for _u, v in limits)
+    plane_v1 = max(v for _u, v in limits)
+
+    pieces = []
+
+    for index, item in enumerate(items):
+        wall = item[0]
+        base_level = item[3]
+        boxes = item[5]
+
+        flat = shapes[index]
         patches = []
 
-        if limits and boxes:
-            wall_u0 = min(u for u, _v in limits)
-            wall_u1 = max(u for u, _v in limits)
-            wall_v0 = min(v for _u, v in limits)
-            wall_v1 = max(v for _u, v in limits)
+        for corners in boxes:
+            us = [along(point) for point in corners]
+            vs = [point.Z for point in corners]
 
-            for corners in boxes:
-                us = [along(point) for point in corners]
-                vs = [point.Z for point in corners]
+            # Небольшой запас: габарит проёма и вырез в стене совпадают не
+            # идеально, а тонкая недозакрашенная щель ломает всё.
+            margin = 20.0 / FT_MM
 
-                # Небольшой запас: габарит проёма и вырез в стене совпадают
-                # не идеально, а тонкая недозакрашенная щель ломает всё.
-                margin = 20.0 / FT_MM
+            # Обрезаем по границам ВСЕЙ плоскости, а не своего куска. Дверь
+            # часто числится за куском, который сам до пола не доходит
+            # (перемычка над ней) — обрезка по куску схлопывала заращивание
+            # в полоску, и вырез оставался.
+            u0 = max(min(us) - margin, plane_u0)
+            u1 = min(max(us) + margin, plane_u1)
+            v0 = max(min(vs) - margin, plane_v0)
+            v1 = min(max(vs) + margin, plane_v1)
 
-                u0 = max(min(us) - margin, wall_u0)
-                u1 = min(max(us) + margin, wall_u1)
-                v0 = max(min(vs) - margin, wall_v0)
-                v1 = min(max(vs) + margin, wall_v1)
-
-                if u1 - u0 > TOL and v1 - v0 > TOL:
-                    patches.append([[(u0, v0), (u1, v0), (u1, v1), (u0, v1)]])
+            if u1 - u0 > TOL and v1 - v0 > TOL:
+                patches.append([[(u0, v0), (u1, v0), (u1, v1), (u0, v1)]])
 
         pieces.append(Piece(wall, base_level, flat, patches))
 
@@ -1372,6 +1398,20 @@ def _cut_embedded(doc, wall, embedded):
     return done, notes
 
 
+def _patch_note(mset):
+    u"""Где именно встали заращивания — чтобы промах было видно сразу."""
+    parts = []
+
+    for piece in mset.pieces:
+        for u0, u1, v0, v1 in piece.patch_rects:
+            parts.append(u"{}…{} × {}…{}".format(
+                _num(u0 * FT_M), _num(u1 * FT_M),
+                _num(v0 * FT_M), _num(v1 * FT_M)
+            ))
+
+    return u", ".join(parts) if parts else u"нет"
+
+
 def _uncovered_inserts(mset, records):
     u"""Проёмы, чьё место не попало в контур объединённой стены.
 
@@ -1403,12 +1443,12 @@ def _uncovered_inserts(mset, records):
             problems.append(
                 u"{}: середина по стене {} м, по высоте {} м; "
                 u"контур по стене {}…{} м, по высоте {}…{} м; "
-                u"заращено проёмов в наборе: {}".format(
+                u"заращено: {}".format(
                     record.get(u"title", u"проём"),
                     _num(middle_u * FT_M), _num(middle_v * FT_M),
                     _num(min(outline_us) * FT_M), _num(max(outline_us) * FT_M),
                     _num(min(outline_vs) * FT_M), _num(max(outline_vs) * FT_M),
-                    sum(piece.patch_count for piece in mset.pieces)
+                    _patch_note(mset)
                 )
             )
 
