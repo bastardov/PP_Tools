@@ -1412,16 +1412,44 @@ def _patch_note(mset):
     return u", ".join(parts) if parts else u"нет"
 
 
-def _uncovered_inserts(mset, records):
-    u"""Проёмы, чьё место не попало в контур объединённой стены.
+def _uncovered_inserts(doc, wall, mset, records):
+    u"""Проёмы, под которыми в ГОТОВОЙ стене нет материала.
 
-    Дешевле поймать это здесь, чем получить от Revit «Экземпляры ничего не
-    вырезают» в середине транзакции: там уже не видно, о каком проёме речь.
+    Проверяем по реальной геометрии созданной стены, а не по расчётному
+    контуру: расхождение между «посчитали» и «построилось» — как раз тот класс
+    ошибок, который ловится хуже всего, а кончается диалогом Revit
+    «Экземпляры … ничего не вырезают» посреди транзакции.
     """
-    problems = []
+    faces, _problem = wall_contours(wall)
+
+    if not faces:
+        return []
 
     origin = mset.origin
     direction = mset.direction
+
+    def along(point):
+        return ((point.X - origin.X) * direction.X +
+                (point.Y - origin.Y) * direction.Y)
+
+    shapes = []
+    all_us = []
+    all_vs = []
+
+    for loops in faces:
+        flat = []
+
+        for loop in loops:
+            plane_loop = [(along(point), point.Z) for point in loop]
+            flat.append(plane_loop)
+
+            for u, v in plane_loop:
+                all_us.append(u)
+                all_vs.append(v)
+
+        shapes.append(flat)
+
+    problems = []
 
     for record in records:
         corners = record.get(u"corners")
@@ -1429,25 +1457,34 @@ def _uncovered_inserts(mset, records):
         if not corners:
             continue
 
-        us = [((point.X - origin.X) * direction.X +
-               (point.Y - origin.Y) * direction.Y) for point in corners]
+        us = [along(point) for point in corners]
         vs = [point.Z for point in corners]
 
         middle_u = (min(us) + max(us)) / 2.0
         middle_v = (min(vs) + max(vs)) / 2.0
 
-        if not _point_in(mset.outline, middle_u, middle_v):
-            outline_us = [u for u, _v in mset.outline]
-            outline_vs = [v for _u, v in mset.outline]
+        covered = False
 
+        for loops in shapes:
+            inside = False
+
+            for loop in loops:
+                if _point_in(loop, middle_u, middle_v):
+                    inside = not inside
+
+            if inside:
+                covered = True
+                break
+
+        if not covered:
             problems.append(
                 u"{}: середина по стене {} м, по высоте {} м; "
-                u"контур по стене {}…{} м, по высоте {}…{} м; "
+                u"готовая стена по стене {}…{} м, по высоте {}…{} м; "
                 u"заращено: {}".format(
                     record.get(u"title", u"проём"),
                     _num(middle_u * FT_M), _num(middle_v * FT_M),
-                    _num(min(outline_us) * FT_M), _num(max(outline_us) * FT_M),
-                    _num(min(outline_vs) * FT_M), _num(max(outline_vs) * FT_M),
+                    _num(min(all_us) * FT_M), _num(max(all_us) * FT_M),
+                    _num(min(all_vs) * FT_M), _num(max(all_vs) * FT_M),
                     _patch_note(mset)
                 )
             )
@@ -1485,6 +1522,25 @@ def _restore_inserts(doc, wall, records, level):
 
             _write_params(instance, record[u"params"])
             doc.Regenerate()
+
+            # Revit мог поставить проём не туда, куда просили: тогда он тоже
+            # ничего не вырежет, но узнаем мы об этом уже из его диалога.
+            try:
+                placed = instance.Location
+
+                if isinstance(placed, LocationPoint):
+                    moved = placed.Point.DistanceTo(record[u"point"])
+
+                    if moved > 50.0 / FT_MM:
+                        failed.append(
+                            u"{} — Revit поставил проём в другое место, "
+                            u"на {} м от исходного".format(
+                                record.get(u"title", u"проём"), _num(moved * FT_M)
+                            )
+                        )
+                        continue
+            except Exception:
+                pass
 
             done += 1
         except Exception as ex:
@@ -1621,7 +1677,7 @@ def merge(doc, mset, wall_type, move_inserts=False):
         )
 
     if inserts:
-        gaps = _uncovered_inserts(mset, inserts)
+        gaps = _uncovered_inserts(doc, new_wall, mset, inserts)
 
         if gaps:
             raise Exception(
