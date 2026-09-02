@@ -60,17 +60,6 @@ def _num(value):
     return text.replace(u".", u",")
 
 
-def _param_double(element, bip):
-    try:
-        p = element.get_Parameter(bip)
-        if p is not None and p.HasValue:
-            return p.AsDouble()
-    except Exception:
-        pass
-
-    return 0.0
-
-
 def _param_id(element, bip):
     try:
         p = element.get_Parameter(bip)
@@ -150,23 +139,40 @@ def type_title(wall_type):
 # ======================================================================
 
 class Piece(object):
-    u"""Кусок стены: контур грани в системе координат набора."""
+    u"""Кусок стены: контуры его грани в системе координат набора.
 
-    def __init__(self, wall, base_level, polygon, source=u"грани"):
+    `faces` — список граней. Каждая грань это список контуров: первый внешний,
+    остальные, если есть, — вырезы. Так кусок описывается честно, даже когда
+    Revit разбил грань стены на несколько частей или в ней есть отверстие.
+    """
+
+    def __init__(self, wall, base_level, faces):
         self.wall = wall
         self.id = wall.Id
         self.base_level = base_level
-        self.source = source
-        self.polygon = polygon
+        self.faces = faces
 
-        us = [u for u, _v in polygon]
-        vs = [v for _u, v in polygon]
+        us = []
+        vs = []
+        area = 0.0
+
+        for loops in faces:
+            signed = 0.0
+
+            for loop in loops:
+                for u, v in loop:
+                    us.append(u)
+                    vs.append(v)
+
+                signed += _signed_area(loop)
+
+            area += abs(signed)
 
         self.u0 = min(us)
         self.u1 = max(us)
         self.v0 = min(vs)
         self.v1 = max(vs)
-        self.area = _polygon_area(polygon)
+        self.area = area
 
     @property
     def type_id(self):
@@ -174,6 +180,20 @@ class Piece(object):
             return self.wall.WallType.Id
         except Exception:
             return None
+
+    def contains(self, x, y):
+        u"""Точка внутри куска: чётность попаданий в контуры одной грани."""
+        for loops in self.faces:
+            inside = False
+
+            for loop in loops:
+                if _point_in(loop, x, y):
+                    inside = not inside
+
+            if inside:
+                return True
+
+        return False
 
 
 class Reject(object):
@@ -235,12 +255,11 @@ class MergeSet(object):
         rows = []
 
         for piece in sorted(self.pieces, key=lambda p: (p.v0, p.u0)):
-            rows.append(u"{} · длина {} м · низ {}, верх {} · по {}".format(
+            rows.append(u"{} · длина {} м · низ {}, верх {}".format(
                 wall_title(piece.wall),
                 _num((piece.u1 - piece.u0) * FT_M),
                 _num(piece.v0 * FT_M),
-                _num(piece.v1 * FT_M),
-                piece.source
+                _num(piece.v1 * FT_M)
             ))
 
         return rows
@@ -272,7 +291,7 @@ class MergeSet(object):
 #  Пригодность куска
 # ======================================================================
 
-def _reason_not_mergeable(wall, points):
+def _reason_not_mergeable(wall, faces):
     u"""Почему стену нельзя объединять. None — можно."""
     try:
         if wall.CurtainGrid is not None:
@@ -321,7 +340,7 @@ def _reason_not_mergeable(wall, points):
     # Контур куска должен быть «ступенчатым»: только горизонтали и вертикали.
     # Прямоугольник, Г, П и всё, что делает сам инструмент, сюда попадают;
     # наклонные и скруглённые профили — нет.
-    if points is not None and not _is_rectilinear(points):
+    if faces is not None and not _is_rectilinear(faces):
         return u"контур грани не ступенчатый (наклонный или скруглённый профиль)"
 
     try:
@@ -361,8 +380,51 @@ def _solids(geometry, depth=0):
     return found
 
 
-def _biggest_face(wall):
-    u"""Самая большая грань стены, смотрящая наружу или внутрь. None — нет."""
+def _same_point(a, b):
+    return (abs(a.X - b.X) <= TOL and
+            abs(a.Y - b.Y) <= TOL and
+            abs(a.Z - b.Z) <= TOL)
+
+
+def _face_loops(face):
+    u"""Контуры грани в мировых координатах. None — разобрать не вышло."""
+    loops = []
+
+    try:
+        for loop in face.EdgeLoops:
+            points = []
+
+            for edge in loop:
+                try:
+                    chunk = edge.TessellateOnFace(face)
+                except Exception:
+                    chunk = edge.Tessellate()
+
+                for point in chunk:
+                    if points and _same_point(points[-1], point):
+                        continue
+
+                    points.append(point)
+
+            while len(points) > 1 and _same_point(points[0], points[-1]):
+                points.pop()
+
+            if len(points) >= 3:
+                loops.append(points)
+    except Exception:
+        return None
+
+    return loops or None
+
+
+def wall_contours(wall):
+    u"""Контуры наружной грани стены. Возврат: (грани, причина отказа).
+
+    Грань стены может быть разбита Revit на несколько компланарных кусков
+    (примыкания, объединённая геометрия) и может содержать вырезы. Поэтому
+    берём не одну самую большую грань, а ВСЕ грани, лежащие в одной плоскости,
+    и каждую — со всеми её контурами.
+    """
     try:
         options = Options()
         options.ComputeReferences = False
@@ -370,10 +432,10 @@ def _biggest_face(wall):
         options.DetailLevel = ViewDetailLevel.Medium
 
         facing = wall.Orientation
-        best = None
+        groups = {}
 
-        for item in _solids(wall.get_Geometry(options)):
-            for face in item.Faces:
+        for solid in _solids(wall.get_Geometry(options)):
+            for face in solid.Faces:
                 if not isinstance(face, PlanarFace):
                     continue
 
@@ -382,98 +444,62 @@ def _biggest_face(wall):
                 if abs(normal.Z) > 0.01:
                     continue
 
-                if abs(normal.DotProduct(facing)) < 0.99:
+                if normal.DotProduct(facing) < 0.99:
                     continue
 
-                if best is None or face.Area > best.Area:
-                    best = face
+                origin = face.Origin
+                offset = origin.X * facing.X + origin.Y * facing.Y
 
-        return best
-    except Exception:
-        return None
+                groups.setdefault(round(offset * FT_MM, 0), []).append(face)
+
+        if not groups:
+            return None, u"у стены не нашлось вертикальной грани"
+
+        best = None
+
+        for faces in groups.values():
+            weight = 0.0
+
+            for face in faces:
+                weight += face.Area
+
+            if best is None or weight > best[0]:
+                best = (weight, faces)
+
+        result = []
+
+        for face in best[1]:
+            loops = _face_loops(face)
+
+            if loops is None:
+                return None, u"не удалось разобрать контур грани"
+
+            result.append(loops)
+
+        return result, None
+    except Exception as ex:
+        return None, u"ошибка чтения геометрии: {}".format(ex)
 
 
-def _same_point(a, b):
-    return (abs(a.X - b.X) <= TOL and
-            abs(a.Y - b.Y) <= TOL and
-            abs(a.Z - b.Z) <= TOL)
+def _is_rectilinear(faces):
+    u"""Все контуры состоят только из горизонталей и вертикалей."""
+    for loops in faces:
+        for loop in loops:
+            count = len(loop)
 
+            for index in range(count):
+                a = loop[index]
+                b = loop[(index + 1) % count]
 
-def _face_polygon(face):
-    u"""Точки контура грани по порядку обхода. None — прочитать не вышло."""
-    try:
-        loops = face.EdgeLoops
-
-        if loops.Size != 1:
-            return None
-
-        points = []
-
-        for edge in loops.get_Item(0):
-            try:
-                chunk = edge.TessellateOnFace(face)
-            except Exception:
-                chunk = edge.Tessellate()
-
-            for point in chunk:
-                if points and _same_point(points[-1], point):
+                if abs(a.Z - b.Z) <= TOL:
                     continue
 
-                points.append(point)
+                if abs(a.X - b.X) <= TOL and abs(a.Y - b.Y) <= TOL:
+                    continue
 
-        while len(points) > 1 and _same_point(points[0], points[-1]):
-            points.pop()
-
-        return points if len(points) >= 4 else None
-    except Exception:
-        return None
-
-
-def _is_rectilinear(points):
-    u"""Контур состоит только из горизонталей и вертикалей."""
-    count = len(points)
-
-    for index in range(count):
-        a = points[index]
-        b = points[(index + 1) % count]
-
-        if abs(a.Z - b.Z) <= TOL:
-            continue
-
-        if abs(a.X - b.X) <= TOL and abs(a.Y - b.Y) <= TOL:
-            continue
-
-        return False
+                return False
 
     return True
-
-
-def _vertical_range(wall, doc):
-    u"""(низ, верх) по параметрам стены. Запасной путь, если нет геометрии.
-
-    Параметрам верить нельзя, когда у стены отредактирован профиль: они
-    описывают зависимости, а не реальное тело. Поэтому это именно фолбэк.
-    """
-    base_id = _param_id(wall, BuiltInParameter.WALL_BASE_CONSTRAINT)
-    base_level = doc.GetElement(base_id) if base_id is not None else None
-
-    if not isinstance(base_level, Level):
-        return None
-
-    base_z = base_level.Elevation + _param_double(wall, BuiltInParameter.WALL_BASE_OFFSET)
-
-    top_id = _param_id(wall, BuiltInParameter.WALL_HEIGHT_TYPE)
-    top_level = doc.GetElement(top_id) if top_id is not None else None
-
-    if isinstance(top_level, Level):
-        top_z = top_level.Elevation + _param_double(wall, BuiltInParameter.WALL_TOP_OFFSET)
-    else:
-        top_z = base_z + _param_double(wall, BuiltInParameter.WALL_USER_HEIGHT_PARAM)
-
-    if top_z - base_z < TOL:
-        return None
-
-    return base_z, top_z
 
 
 def _plan_direction(line):
@@ -545,30 +571,24 @@ def plan(doc, walls):
 
 def _prepare(wall, doc):
     u"""Разобрать одну стену. Возврат: (ключ плоскости, данные, причина отказа)."""
-    face = _biggest_face(wall)
-    points = _face_polygon(face) if face is not None else None
+    # Контуры берём с РЕАЛЬНОЙ геометрии. Параметрам «низ/верх» верить нельзя:
+    # у перемычки над проёмом они говорят «от пола до уровня выше», хотя тело
+    # только над окном. Смещения к тому же относительные и у каждого куска свои.
+    faces, problem = wall_contours(wall)
 
-    if face is not None and points is None:
-        return None, None, u"не удалось прочитать контур грани стены"
-
-    reason = _reason_not_mergeable(wall, points)
+    reason = _reason_not_mergeable(wall, faces)
 
     if reason:
         return None, None, reason
+
+    if faces is None:
+        return None, None, problem or u"не удалось прочитать геометрию стены"
 
     base_id = _param_id(wall, BuiltInParameter.WALL_BASE_CONSTRAINT)
     base_level = doc.GetElement(base_id) if base_id is not None else None
 
     if not isinstance(base_level, Level):
         return None, None, u"у стены не задан базовый уровень"
-
-    # Контур куска снимаем с РЕАЛЬНОЙ грани: параметры «низ/верх» врут,
-    # если у стены отредактирован профиль (перемычка над проёмом — как раз
-    # такой случай: по параметрам она от пола до потолка).
-    vertical = _vertical_range(wall, doc)
-
-    if points is None and vertical is None:
-        return None, None, u"не удалось определить низ и верх"
 
     line = wall.Location.Curve
     direction = _plan_direction(line)
@@ -585,7 +605,7 @@ def _prepare(wall, doc):
         round(offset * FT_MM, 0)
     )
 
-    return key, (wall, line, direction, base_level, points, vertical), None
+    return key, (wall, line, direction, base_level, faces), None
 
 
 def _plane_sets(items):
@@ -599,22 +619,14 @@ def _plane_sets(items):
 
     pieces = []
 
-    for wall, line, _dir, base_level, points, vertical in items:
-        if points:
-            polygon = [(along(point), point.Z) for point in points]
-            source = u"грани"
-        else:
-            u_a = along(line.GetEndPoint(0))
-            u_b = along(line.GetEndPoint(1))
-            v0, v1 = vertical
+    for wall, _line, _dir, base_level, faces in items:
+        flat = []
 
-            polygon = [
-                (min(u_a, u_b), v0), (max(u_a, u_b), v0),
-                (max(u_a, u_b), v1), (min(u_a, u_b), v1)
-            ]
-            source = u"параметрам"
+        for loops in faces:
+            flat.append([[(along(point), point.Z) for point in loop]
+                         for loop in loops])
 
-        pieces.append(Piece(wall, base_level, polygon, source))
+        pieces.append(Piece(wall, base_level, flat))
 
     return _build_sets(pieces, origin, direction)
 
@@ -631,8 +643,11 @@ def _axis(values):
     return result
 
 
-def _polygon_area(polygon):
-    u"""Площадь замкнутого контура по формуле шнуровки."""
+def _signed_area(polygon):
+    u"""Площадь замкнутого контура со знаком (шнуровка).
+
+    Знак нужен, чтобы вырез внутри грани вычитался, а не складывался.
+    """
     total = 0.0
     count = len(polygon)
 
@@ -641,7 +656,7 @@ def _polygon_area(polygon):
         x1, y1 = polygon[(index + 1) % count]
         total += x0 * y1 - x1 * y0
 
-    return abs(total) / 2.0
+    return total / 2.0
 
 
 def _point_in(polygon, x, y):
@@ -682,8 +697,18 @@ def _build_sets(pieces, origin, direction):
     sets = []
     rejects = []
 
-    us = _axis([u for piece in pieces for u, _v in piece.polygon])
-    vs = _axis([v for piece in pieces for _u, v in piece.polygon])
+    raw_us = []
+    raw_vs = []
+
+    for piece in pieces:
+        for loops in piece.faces:
+            for loop in loops:
+                for u, v in loop:
+                    raw_us.append(u)
+                    raw_vs.append(v)
+
+    us = _axis(raw_us)
+    vs = _axis(raw_vs)
 
     nu = len(us) - 1
     nv = len(vs) - 1
@@ -707,7 +732,7 @@ def _build_sets(pieces, origin, direction):
             for index, piece in enumerate(pieces):
                 if (piece.u0 - TOL <= cu <= piece.u1 + TOL and
                         piece.v0 - TOL <= cv <= piece.v1 + TOL and
-                        _point_in(piece.polygon, cu, cv)):
+                        piece.contains(cu, cv)):
                     here.append(index)
 
             column.append(here)
