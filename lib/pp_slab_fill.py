@@ -880,6 +880,7 @@ class Pocket(object):
         self.depth_mm = depth_mm
         self.column = column
         self.limit_mm = limit_mm
+        self.fill_kind = u""
 
     def describe(self):
         if self.column is not None:
@@ -887,9 +888,14 @@ class Pocket(object):
         else:
             reason = u"мельче порога"
 
-        return u"вырез {:.0f}×{:.0f} мм — {}".format(
+        text = u"вырез {:.0f}×{:.0f} мм — {}".format(
             self.width_mm, self.depth_mm, reason
         )
+
+        if self.fill_kind:
+            text += u" · закроется {}".format(self.fill_kind)
+
+        return text
 
 
 class Hole(object):
@@ -1068,7 +1074,12 @@ def _safe_line(first, second):
 
 
 def _corner_fits(pocket, corner, start_point, end_point, previous_dir, next_dir):
-    u"""Годится ли доведение соседних рёбер до их общего угла."""
+    u"""Годится ли доведение соседних рёбер до их общего угла.
+
+    Проверка нужна только против разбега почти параллельных прямых: их точка
+    пересечения улетает за здание. Обычный угол колонны в неё укладывается,
+    поэтому запас берём вдвое от порога выреза.
+    """
     tolerance = 1.0 * MM_TO_FEET
 
     forward = ((corner.X - start_point.X) * previous_dir.X +
@@ -1086,15 +1097,57 @@ def _corner_fits(pocket, corner, start_point, end_point, previous_dir, next_dir)
     points = list(pocket.points)
     points.append(corner)
     width_mm, depth_mm = pocket_size_mm(points, start_point, end_point)
+    limit = pocket.limit_mm * 2.0 + 100.0
 
-    return width_mm <= pocket.limit_mm and depth_mm <= pocket.limit_mm
+    return width_mm <= limit and depth_mm <= limit
+
+
+def _knee_point(previous_start, previous_dir, end_point):
+    u"""Проекция конца выреза на прямую предыдущего ребра — колено уступа."""
+    step = ((end_point.X - previous_start.X) * previous_dir.X +
+            (end_point.Y - previous_start.Y) * previous_dir.Y)
+
+    return XYZ(previous_start.X + previous_dir.X * step,
+               previous_start.Y + previous_dir.Y * step,
+               end_point.Z)
+
+
+def _segments_free(loop, pocket, segments):
+    u"""Новые отрезки не должны пересекать остальной контур."""
+    count = loop.count
+    skip = set()
+
+    for step in range(pocket.count):
+        skip.add((pocket.start + step) % count)
+
+    skip.add((pocket.start - 1) % count)
+    skip.add((pocket.start + pocket.count) % count)
+
+    for index in range(count):
+        if index % count in skip:
+            continue
+
+        first = loop.point_at(index)
+        second = loop.point_at(index + 1)
+
+        for pair in segments:
+            if segments_cross(pair[0], pair[1], first, second):
+                return False
+
+    return True
 
 
 def build_edits(loop, pockets):
     u"""Что именно сделать с кривыми контура ради найденных вырезов.
 
-    Ребро рядом с вырезом продлевается (и сохраняет свои параметры), а новая
-    линия создаётся только там, где продлить нельзя.
+    Порядок попыток — от самого «прямого» к запасному:
+      1. соседние рёбра на одной прямой — левое просто продлевается;
+      2. соседи сходятся — оба ведутся до их общего угла (вырез в углу);
+      3. иначе уступ: левое ребро продлевается, и от него идёт перпендикуляр
+         к концу выреза — контур остаётся прямоугольным;
+      4. хорда наискось — только когда продлить нечего (сосед не отрезок).
+    Соседние рёбра правятся, а не пересоздаются, поэтому их параметры
+    (у кровли — уклон и смещения) остаются на месте.
     """
     delete_ids = []
     modify = []
@@ -1124,31 +1177,33 @@ def build_edits(loop, pockets):
                 previous_index not in touched and next_index not in touched and
                 previous_index != next_index)
 
+        previous_curve = previous_item[u"curve"]
+        previous_line = isinstance(previous_curve, Line)
+        previous_dir = _direction(previous_curve) if previous_line else None
+        previous_start = previous_curve.GetEndPoint(0)
+
         pocket_modify = []
         pocket_new = []
         solved = False
 
-        if free and isinstance(previous_item[u"curve"], Line) \
-                and isinstance(next_item[u"curve"], Line):
-            previous_curve = previous_item[u"curve"]
+        # 1–2. соседи на одной прямой или сходятся в угол
+        if free and previous_dir is not None and isinstance(next_item[u"curve"], Line):
             next_curve = next_item[u"curve"]
-            previous_dir = _direction(previous_curve)
             next_dir = _direction(next_curve)
 
-            if previous_dir is not None and next_dir is not None:
+            if next_dir is not None:
                 cross = previous_dir.X * next_dir.Y - previous_dir.Y * next_dir.X
                 dot = previous_dir.X * next_dir.X + previous_dir.Y * next_dir.Y
-                previous_start = previous_curve.GetEndPoint(0)
 
                 offset = abs((end_point.X - previous_start.X) * previous_dir.Y -
                              (end_point.Y - previous_start.Y) * previous_dir.X)
 
                 if abs(cross) < TURN_EPS and dot > 0.0 and offset <= 2.0 * MM_TO_FEET:
-                    # соседние рёбра на одной прямой — просто продлеваем левое
                     merged = _safe_line(previous_start, end_point)
 
                     if merged is not None:
                         pocket_modify.append((previous_item[u"id"], merged, previous_index))
+                        pocket.fill_kind = u"продлением ребра"
                         solved = True
 
                 elif abs(cross) >= TURN_EPS:
@@ -1163,11 +1218,41 @@ def build_edits(loop, pockets):
                         first = _safe_line(previous_start, corner)
                         second = _safe_line(corner, next_curve.GetEndPoint(1))
 
-                        if first is not None and second is not None:
+                        if first is not None and second is not None and _segments_free(
+                                loop, pocket,
+                                [(previous_start, corner), (corner, next_curve.GetEndPoint(1))]):
                             pocket_modify.append((previous_item[u"id"], first, previous_index))
                             pocket_modify.append((next_item[u"id"], second, next_index))
+                            pocket.fill_kind = u"по углу"
                             solved = True
 
+        # 3. уступ под прямым углом
+        if not solved and free and previous_dir is not None:
+            knee = _knee_point(previous_start, previous_dir, end_point)
+
+            forward = ((knee.X - start_point.X) * previous_dir.X +
+                       (knee.Y - start_point.Y) * previous_dir.Y)
+
+            if forward > 1.0 * MM_TO_FEET:
+                if knee.DistanceTo(end_point) < 1.5 * MM_TO_FEET:
+                    merged = _safe_line(previous_start, end_point)
+
+                    if merged is not None:
+                        pocket_modify.append((previous_item[u"id"], merged, previous_index))
+                        pocket.fill_kind = u"продлением ребра"
+                        solved = True
+                else:
+                    lead = _safe_line(previous_start, knee)
+                    jog = _safe_line(knee, end_point)
+
+                    if lead is not None and jog is not None and _segments_free(
+                            loop, pocket, [(previous_start, knee), (knee, end_point)]):
+                        pocket_modify.append((previous_item[u"id"], lead, previous_index))
+                        pocket_new.append(jog)
+                        pocket.fill_kind = u"уступом"
+                        solved = True
+
+        # 4. запасной путь — хорда наискось
         if not solved:
             chord = _safe_line(start_point, end_point)
 
@@ -1175,6 +1260,7 @@ def build_edits(loop, pockets):
                 continue
 
             pocket_new.append(chord)
+            pocket.fill_kind = u"по диагонали"
 
         for step in range(pocket.count):
             delete_ids.append(loop.curve_at(pocket.start + step)[u"id"])
