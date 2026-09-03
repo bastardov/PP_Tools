@@ -483,8 +483,30 @@ def column_at(points, columns, min_z, max_z):
 # КОНТУР ЭСКИЗА
 # ─────────────────────────────────────────────
 
+def _sketch_score(sketch):
+    u"""Площадь профиля эскиза в плане — по ней выбираем эскиз самой плиты."""
+    points = []
+
+    for curves in (_profile_loops(sketch) or []):
+        for curve in curves:
+            points.append(curve.GetEndPoint(0))
+            points.append(curve.GetEndPoint(1))
+
+    if not points:
+        return 0.0
+
+    rect = rect_of(points)
+
+    return (rect[2] - rect[0]) * (rect[3] - rect[1])
+
+
 def find_sketch(doc, element):
-    u"""Эскиз контура плиты: сначала свойство SketchId, потом зависимые элементы."""
+    u"""Эскиз контура плиты.
+
+    У плиты может быть несколько зависимых эскизов — например у проёмов в ней.
+    Свой контур самый крупный, поэтому кандидаты сравниваются по площади
+    профиля в плане.
+    """
     try:
         sketch_id = element.SketchId
     except Exception:
@@ -501,14 +523,31 @@ def find_sketch(doc, element):
     except Exception:
         found = None
 
-    if found:
-        for element_id in found:
-            sketch = doc.GetElement(element_id)
+    candidates = []
 
-            if isinstance(sketch, Sketch):
-                return sketch
+    for element_id in found or []:
+        sketch = doc.GetElement(element_id)
 
-    return None
+        if isinstance(sketch, Sketch):
+            candidates.append(sketch)
+
+    if not candidates:
+        return None
+
+    if len(candidates) == 1:
+        return candidates[0]
+
+    best = candidates[0]
+    best_score = _sketch_score(best)
+
+    for sketch in candidates[1:]:
+        score = _sketch_score(sketch)
+
+        if score > best_score:
+            best = sketch
+            best_score = score
+
+    return best
 
 
 def _sketch_curves(doc, sketch):
@@ -528,6 +567,31 @@ def _sketch_curves(doc, sketch):
     result = []
 
     for element_id in element_ids:
+        element = doc.GetElement(element_id)
+
+        if not isinstance(element, CurveElement):
+            continue
+
+        curve = element.GeometryCurve
+
+        if curve is None:
+            continue
+
+        result.append({u"id": element.Id, u"curve": curve})
+
+    return result
+
+
+def _owner_curves(doc, owner):
+    u"""Линии, зависящие от самой плиты — запасной источник, если эскиз молчит."""
+    try:
+        found = owner.GetDependentElements(ElementClassFilter(CurveElement))
+    except Exception:
+        return []
+
+    result = []
+
+    for element_id in found or []:
         element = doc.GetElement(element_id)
 
         if not isinstance(element, CurveElement):
@@ -580,6 +644,133 @@ def _chain_loops(entries):
         loops.append({u"curves": chain, u"closed": closed})
 
     return loops
+
+
+MATCH_TOL = 2.0 * MM_TO_FEET       # сопоставление профиля с линиями эскиза
+
+
+def _profile_loops(sketch):
+    u"""Контуры из штатного профиля эскиза; None — профиль недоступен."""
+    try:
+        profile = sketch.Profile
+    except Exception:
+        return None
+
+    if profile is None:
+        return None
+
+    loops = []
+
+    try:
+        for curve_array in profile:
+            curves = [curve for curve in curve_array]
+
+            if curves:
+                loops.append(curves)
+    except Exception:
+        return None
+
+    return loops
+
+
+def _match_entry(curve, entries, used):
+    u"""Линия эскиза, совпадающая с кривой профиля (в любую сторону)."""
+    first = curve.GetEndPoint(0)
+    second = curve.GetEndPoint(1)
+
+    for index, item in enumerate(entries):
+        if index in used:
+            continue
+
+        other = item[u"curve"]
+        other_first = other.GetEndPoint(0)
+        other_second = other.GetEndPoint(1)
+
+        straight = (first.DistanceTo(other_first) <= MATCH_TOL and
+                    second.DistanceTo(other_second) <= MATCH_TOL)
+        reversed_match = (first.DistanceTo(other_second) <= MATCH_TOL and
+                          second.DistanceTo(other_first) <= MATCH_TOL)
+
+        if straight or reversed_match:
+            used.add(index)
+            return item
+
+    return None
+
+
+def read_loops(doc, sketch, owner=None):
+    u"""Замкнутые контуры эскиза и замечания по нему.
+
+    Сначала берём штатный профиль (`Sketch.Profile`): он уже разложен по
+    контурам, а лишние линии эскиза — стрелка уклона, опорные линии — в него
+    не попадают. Профиль отдаёт только геометрию, поэтому каждая его кривая
+    сопоставляется с линией эскиза: править надо именно элементы.
+    """
+    own_entries = _sketch_curves(doc, sketch)
+    profile = _profile_loops(sketch) or []
+    pool = own_entries
+
+    if not pool and owner is not None and profile:
+        # линии эскиза не отдались напрямую — берём зависимые кривые плиты
+        pool = _owner_curves(doc, owner)
+
+    if not pool:
+        raise PlanError(u"в эскизе не нашлось линий контура")
+
+    loops = []
+    notes = []
+    used = set()
+
+    for curves in profile:
+        group = []
+
+        for curve in curves:
+            item = _match_entry(curve, pool, used)
+
+            if item is None:
+                group = []
+                break
+
+            group.append(item)
+
+        if not group:
+            notes.append(u"один контур эскиза не удалось сопоставить с его линиями — пропущен")
+            continue
+
+        chains = _chain_loops(group)
+        closed = [chain for chain in chains if chain[u"closed"]]
+
+        if len(closed) != 1:
+            notes.append(u"один контур эскиза не замкнулся — пропущен")
+            continue
+
+        loops.append(Loop(closed[0][u"curves"]))
+
+    if not loops:
+        # запасной путь: сцепляем линии самого эскиза, незамкнутые куски пропускаем
+        notes = []
+
+        for chain in _chain_loops(own_entries):
+            if chain[u"closed"]:
+                loops.append(Loop(chain[u"curves"]))
+            elif chain[u"curves"]:
+                notes.append(
+                    u"в эскизе есть незамкнутая линия (например стрелка уклона) — пропущена"
+                )
+
+    if not loops:
+        raise PlanError(
+            u"в эскизе не нашлось ни одного замкнутого контура "
+            u"(линий: {}, контуров профиля: {})".format(len(pool), len(profile))
+        )
+
+    result = []
+
+    for note in notes:
+        if note not in result:
+            result.append(note)
+
+    return loops, result
 
 
 class Loop(object):
@@ -1133,20 +1324,10 @@ def _plan_one(doc, element, options, columns):
             u"выдавливанием и у элементов, построенных не по эскизу"
         )
 
-    entries = _sketch_curves(doc, sketch)
-
-    if not entries:
-        raise PlanError(u"в эскизе не нашлось линий контура")
-
-    loops = []
-
-    for raw in _chain_loops(entries):
-        if not raw[u"closed"]:
-            raise PlanError(u"контур эскиза не замкнут — поправьте его вручную")
-
-        loops.append(Loop(raw[u"curves"]))
+    loops, notes = read_loops(doc, sketch, element)
 
     item = SlabPlan(doc, element, sketch)
+    item.notes.extend(notes)
     outers, holes = _split_loops(loops)
     min_z, max_z = _z_range(element)
 
@@ -1171,6 +1352,11 @@ def _plan_one(doc, element, options, columns):
 
             for entry in loop.curves:
                 item.delete_ids.append(entry[u"id"])
+
+    if not item.total:
+        item.notes.append(u"контуров: {}, линий в них: {} — подходящих выемок нет".format(
+            len(loops), sum(loop.count for loop in loops)
+        ))
 
     return item
 
