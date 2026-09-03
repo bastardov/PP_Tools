@@ -1,0 +1,185 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Переставить стороны света"
+        Width="800"
+        Height="760"
+        MinWidth="700"
+        MinHeight="640"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>              <!-- заголовок -->
+      <RowDefinition Height="*" MinHeight="280"/> <!-- два компаса -->
+      <RowDefinition Height="Auto"/>              <!-- угол поворота -->
+      <RowDefinition Height="Auto"/>              <!-- добавка -->
+      <RowDefinition Height="Auto"/>              <!-- итог -->
+      <RowDefinition Height="Auto"/>              <!-- разделитель -->
+      <RowDefinition Height="Auto"/>              <!-- подвал -->
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0">
+      <TextBlock Style="{StaticResource H1}" Text="Переставить стороны света"/>
+      <TextBlock Style="{StaticResource Subtitle}" Margin="0,2,0,0"
+                 TextWrapping="Wrap"
+                 Text="Здание развернули — записанные стороны света стали неверными. Инструмент сдвигает готовые значения по кругу, заново их не вычисляя."/>
+    </StackPanel>
+
+    <!-- ===== Два компаса ===== -->
+    <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,14,0,0">
+      <Grid Margin="14,12,14,12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- слева: как записано сейчас -->
+        <StackPanel Grid.Column="0">
+          <TextBlock Style="{StaticResource FieldLabel}"
+                     HorizontalAlignment="Center"
+                     Text="СЕЙЧАС — КАК ЗАПИСАНО В МОДЕЛИ"/>
+
+          <Canvas x:Name="CanvasNow"
+                  Width="222" Height="222"
+                  Margin="0,8,0,0"
+                  HorizontalAlignment="Center"
+                  Background="Transparent"/>
+
+          <TextBlock Style="{StaticResource Caption}"
+                     Margin="0,6,0,0"
+                     HorizontalAlignment="Center"
+                     TextAlignment="Center"
+                     TextWrapping="Wrap"
+                     Text="Число под буквой — сколько элементов вида записаны с этой стороной света."/>
+        </StackPanel>
+
+        <TextBlock Grid.Column="1"
+                   Text="→"
+                   FontSize="30"
+                   Margin="14,0,14,0"
+                   VerticalAlignment="Center"
+                   Foreground="{StaticResource Muted}"/>
+
+        <!-- справа: как станет -->
+        <StackPanel Grid.Column="2">
+          <TextBlock Style="{StaticResource FieldLabel}"
+                     HorizontalAlignment="Center"
+                     Text="СТАНЕТ ПОСЛЕ НАЖАТИЯ"/>
+
+          <Canvas x:Name="CanvasNext"
+                  Width="222" Height="222"
+                  Margin="0,8,0,0"
+                  HorizontalAlignment="Center"
+                  Background="Transparent"/>
+
+          <StackPanel Orientation="Horizontal"
+                      HorizontalAlignment="Center"
+                      Margin="0,4,0,0">
+            <Button x:Name="BtnCcw"
+                    Style="{StaticResource Button.Tool}"
+                    FontSize="17"
+                    Content="&#x21BA;"
+                    ToolTip="Повернуть компас на 45° против часовой стрелки"/>
+            <TextBlock x:Name="TxtAngle"
+                       Style="{StaticResource Body}"
+                       MinWidth="150"
+                       Margin="6,0,6,0"
+                       VerticalAlignment="Center"
+                       TextAlignment="Center"
+                       Text="без поворота"/>
+            <Button x:Name="BtnCw"
+                    Style="{StaticResource Button.Tool}"
+                    FontSize="17"
+                    Content="&#x21BB;"
+                    ToolTip="Повернуть компас на 45° по часовой стрелке"/>
+          </StackPanel>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- ===== Угол поворота ===== -->
+    <StackPanel Grid.Row="2" Margin="0,14,0,0">
+      <TextBlock Style="{StaticResource FieldLabel}"
+                 Text="НА СКОЛЬКО ПОВЕРНУЛИ ЗДАНИЕ (ПО ЧАСОВОЙ СТРЕЛКЕ)"/>
+
+      <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,6" TextWrapping="Wrap"
+                 Text="Щёлкните угол — правый компас повернётся так же, как повернулось здание. Буква С на нём должна встать туда, куда теперь смотрит бывший север."/>
+
+      <WrapPanel x:Name="PnlAngles"/>
+    </StackPanel>
+
+    <!-- ===== Добавка на сторону света ===== -->
+    <Grid Grid.Row="3" Margin="0,14,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <CheckBox x:Name="ChkCoeff" Grid.Column="0"
+                Style="{StaticResource PP.CheckBox}"
+                VerticalAlignment="Center"
+                ToolTip="С/СВ/В — 1.1, ЮВ и З — 1.05, Ю и ЮЗ — 1.0"/>
+
+      <StackPanel Grid.Column="1" Margin="8,0,0,0">
+        <TextBlock Style="{StaticResource Body}"
+                   TextWrapping="Wrap"
+                   Text="Заодно пересчитать «PP_Добавка на сторону света»"/>
+        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                   Text="По умолчанию выключено: меняется только текст ориентации. Включите, если добавку в модели проставляла кнопка «Опр. стор. света» — иначе коэффициент останется от старой стороны."/>
+      </StackPanel>
+    </Grid>
+
+    <!-- ===== Итог ===== -->
+    <Border Grid.Row="4" Style="{StaticResource Card.Result}" Margin="0,14,0,0">
+      <StackPanel>
+        <TextBlock Style="{StaticResource FieldLabel}" Text="ЧТО ПРОИЗОЙДЁТ ПОСЛЕ НАЖАТИЯ"/>
+        <TextBlock Style="{StaticResource Body.Result}"
+                   TextWrapping="Wrap"
+                   Foreground="{Binding ResultBrush}"
+                   Text="{Binding ResultText}"/>
+        <TextBlock Style="{StaticResource Caption}"
+                   Margin="0,4,0,0"
+                   TextWrapping="Wrap"
+                   Text="{Binding MapText}"/>
+      </StackPanel>
+    </Border>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="5" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="6" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock Grid.Column="0"
+                 Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}"
+                 Text="{Binding Status}"
+                 TextWrapping="Wrap"
+                 VerticalAlignment="Center"
+                 Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnCancel" Content="Отмена"
+                Style="{StaticResource Button.Flat}" Margin="0,0,8,0"/>
+        <Button x:Name="BtnRun" Content="Переставить"
+                Style="{StaticResource Button.Primary}"
+                IsEnabled="{Binding IsValid}"/>
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Window>
