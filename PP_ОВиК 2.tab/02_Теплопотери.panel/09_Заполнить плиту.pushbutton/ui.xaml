@@ -1,0 +1,189 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Заполнить плиту"
+        Width="720"
+        Height="820"
+        MinWidth="600"
+        MinHeight="660"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>              <!-- заголовок -->
+      <RowDefinition Height="*" MinHeight="260"/> <!-- разбор выделения -->
+      <RowDefinition Height="Auto"/>              <!-- что считать вырезом -->
+      <RowDefinition Height="Auto"/>              <!-- итог -->
+      <RowDefinition Height="Auto"/>              <!-- разделитель -->
+      <RowDefinition Height="Auto"/>              <!-- подвал -->
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0">
+      <TextBlock Style="{StaticResource H1}" Text="Заполнить плиту"/>
+      <TextBlock Style="{StaticResource Subtitle}" Margin="0,2,0,0"
+                 TextWrapping="Wrap"
+                 Text="Убирает из контура плиты вырезы под колонны — те «зубцы», которые остаются после нарезки полов и кровли по пространствам."/>
+    </StackPanel>
+
+    <!-- ===== Разбор выделения ===== -->
+    <Grid Grid.Row="1" Margin="0,14,0,0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}"
+                 Text="ЧТО НАШЛОСЬ В ВЫБРАННЫХ ПЛИТАХ"/>
+
+      <TextBlock Grid.Row="1" Style="{StaticResource Caption}"
+                 Margin="0,4,0,6" TextWrapping="Wrap"
+                 Text="Список только для просмотра: заполнится всё, что в нём перечислено. Под плитой — её вырезы с размерами и причиной. Строки цвета предупреждения обработать не получится, причина написана в строке."/>
+
+      <Border Grid.Row="2" Style="{StaticResource Card}">
+        <Grid>
+          <ListBox x:Name="LstPlan"
+                   Background="Transparent"
+                   BorderThickness="0"
+                   Padding="4"
+                   ItemContainerStyle="{StaticResource PP.ListBoxItem}"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+
+          <TextBlock x:Name="TxtEmpty"
+                     Style="{StaticResource EmptyState}"
+                     Visibility="Collapsed"
+                     TextWrapping="Wrap"
+                     Margin="24"
+                     Text="Ничего не нашлось. Ослабьте условия ниже или закройте окно и выберите другие плиты."/>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ===== Что считать вырезом ===== -->
+    <StackPanel Grid.Row="2" Margin="0,14,0,0">
+      <TextBlock Style="{StaticResource FieldLabel}" Text="ЧТО СЧИТАТЬ ВЫРЕЗОМ"/>
+
+      <Border Style="{StaticResource Card}" Margin="0,6,0,0">
+        <StackPanel Margin="14,12,14,12">
+
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <CheckBox x:Name="ChkColumns" Grid.Column="0"
+                      Style="{StaticResource PP.CheckBox}"
+                      VerticalAlignment="Center"
+                      ToolTip="Искать колонны в модели и в связях"/>
+
+            <TextBlock Grid.Column="1" Style="{StaticResource Body}"
+                       Margin="8,0,0,0" VerticalAlignment="Center"
+                       TextWrapping="Wrap"
+                       Text="Выемка, в которой стоит колонна"/>
+          </Grid>
+
+          <TextBlock Style="{StaticResource Caption}" Margin="30,4,0,0" TextWrapping="Wrap"
+                     Text="Колонны берутся из модели и из RVT-связей — по габариту в плане и по отметке. Выемка заполняется, только если она не больше самой колонны: настоящий уступ плиты останется на месте."/>
+
+          <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="86"/>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <CheckBox x:Name="ChkSize" Grid.Column="0"
+                      Style="{StaticResource PP.CheckBox}"
+                      VerticalAlignment="Center"
+                      ToolTip="Заполнять мелкие выемки без проверки колонн"/>
+
+            <TextBlock Grid.Column="1" Style="{StaticResource Body}"
+                       Margin="8,0,10,0" VerticalAlignment="Center"
+                       Text="Любая выемка мельче"/>
+
+            <TextBox x:Name="TxtSize" Grid.Column="2"
+                     Style="{StaticResource TextBox.Field}"
+                     Tag="600"
+                     ToolTip="Размер выемки в миллиметрах"/>
+
+            <TextBlock Grid.Column="3" Style="{StaticResource Caption}"
+                       Margin="8,0,0,0" VerticalAlignment="Center"
+                       Text="мм по обеим сторонам"/>
+          </Grid>
+
+          <TextBlock Style="{StaticResource Caption}" Margin="30,4,0,0" TextWrapping="Wrap"
+                     Text="Пригодится, когда колонн нет в модели. Ориентир — самая крупная колонна на этаже: 600 мм закрывают обычный обход колонны 400×400."/>
+
+          <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <CheckBox x:Name="ChkHoles" Grid.Column="0"
+                      Style="{StaticResource PP.CheckBox}"
+                      VerticalAlignment="Center"
+                      ToolTip="Убирать отверстия по тем же условиям"/>
+
+            <TextBlock Grid.Column="1" Style="{StaticResource Body}"
+                       Margin="8,0,0,0" VerticalAlignment="Center"
+                       TextWrapping="Wrap"
+                       Text="Отверстия внутри плиты — по тем же условиям"/>
+          </Grid>
+
+        </StackPanel>
+      </Border>
+    </StackPanel>
+
+    <!-- ===== Итог ===== -->
+    <Border Grid.Row="3" Style="{StaticResource Card.Result}" Margin="0,14,0,0">
+      <StackPanel>
+        <TextBlock Style="{StaticResource FieldLabel}" Text="ЧТО ПРОИЗОЙДЁТ ПОСЛЕ НАЖАТИЯ"/>
+        <TextBlock Style="{StaticResource Body.Result}"
+                   TextWrapping="Wrap"
+                   Foreground="{Binding ResultBrush}"
+                   Text="{Binding ResultText}"/>
+      </StackPanel>
+    </Border>
+
+    <!-- ===== Подвал ===== -->
+    <Border Grid.Row="4" Style="{StaticResource Rule}" Margin="0,16,0,0"/>
+
+    <Grid Grid.Row="5" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock Grid.Column="0"
+                 Style="{StaticResource Status}"
+                 Foreground="{Binding StatusBrush}"
+                 Text="{Binding Status}"
+                 TextWrapping="Wrap"
+                 VerticalAlignment="Center"
+                 Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnCancel" Content="Отмена"
+                Style="{StaticResource Button.Flat}" Margin="0,0,8,0"/>
+        <Button x:Name="BtnRun" Content="Заполнить"
+                Style="{StaticResource Button.Primary}"
+                IsEnabled="{Binding IsValid}"/>
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Window>
