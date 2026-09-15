@@ -119,21 +119,6 @@
     "_schema_version": 1, 
     "heatloss_show_report": false, 
     "model_check_settings": {
-        "selected_keys": [
-            "pipe_flow_missing", 
-            "slope_unexpected", 
-            "orphan_no_system", 
-            "near_connectors", 
-            "short_segment", 
-            "degenerate_geometry", 
-            "duplicate_at_point", 
-            "pipe_insulation", 
-            "position_wrong_category", 
-            "position_duplicate", 
-            "grids_halftone", 
-            "smoke_distance", 
-            "smoke_inlet_height"
-        ], 
         "last_selected_key": "smoke_distance", 
         "config": {
             "insul_include_systems": "", 
@@ -170,7 +155,22 @@
             "insul_rules": "ГОСТ 10704; ГОСТ 3262 => Цилиндры некашированные\nПолиэтилен сшитый; PE-Xa; PPR; PP-R => Трубки теплоизоляционные", 
             "orphan_include_partial": "нет", 
             "duplicate_same_type": "да"
-        }
+        }, 
+        "selected_keys": [
+            "pipe_flow_missing", 
+            "slope_unexpected", 
+            "orphan_no_system", 
+            "near_connectors", 
+            "short_segment", 
+            "degenerate_geometry", 
+            "duplicate_at_point", 
+            "pipe_insulation", 
+            "position_wrong_category", 
+            "position_duplicate", 
+            "grids_halftone", 
+            "smoke_distance", 
+            "smoke_inlet_height"
+        ]
     }, 
     "tag_rules": [
         {
@@ -532,26 +532,26 @@
             "nested_vent_categories": "OST_MechanicalEquipment, OST_PipeCurves, OST_DuctCurves, OST_PipeAccessory, OST_DuctAccessory, OST_DuctTerminal, OST_PipeFitting, OST_FlexPipeCurves, OST_PipeInsulations, OST_DuctFitting, OST_FlexDuctCurves, OST_DuctInsulations, OST_GenericModel", 
             "copper_keyword_source": "Имя семейства", 
             "name_presence_param": "ADSK_Наименование", 
-            "badtext_params": "ADSK_Наименование, ADSK_Марка", 
             "bzero_text": "b=0 мм; класс герметичности ,", 
-            "mep_receiver_param": "ADSK_Имя системы сокращенное", 
-            "proxy_ctrl_mapping": "PP_Итоговое кол-во металла для воздуховодов = МЕТАЛЛ_КРЕПЛЕНИЙ_ВОЗДУХОВОДОВ\n\nPP_Итоговое кол-во металла для труб = МЕТАЛЛ_КРЕПЛЕНИЙ_ТРУБ\n\nPP_Утеплитель для окожушивания = Утеплитель для окожушивания\n\nPP_Металл для окожушивания = Металл для окожушивания\n\nPP_Клей для огнезащиты = Клей для огнезащиты", 
             "mep_filter": {
-                "apply_source": true, 
-                "match": "all", 
                 "conditions": [], 
                 "group_combine": "and", 
+                "enabled": false, 
+                "apply_source": true, 
                 "apply_receiver": false, 
-                "enabled": false
+                "match": "all"
             }, 
+            "mep_receiver_param": "ADSK_Имя системы сокращенное", 
+            "proxy_ctrl_mapping": "PP_Итоговое кол-во металла для воздуховодов = МЕТАЛЛ_КРЕПЛЕНИЙ_ВОЗДУХОВОДОВ\n\nPP_Итоговое кол-во металла для труб = МЕТАЛЛ_КРЕПЛЕНИЙ_ТРУБ\n\nPP_Утеплитель для окожушивания = Утеплитель для окожушивания\n\nPP_Металл для окожушивания = Металл для окожушивания\n\nPP_Клей для огнезащиты = Клей для огнезащиты", 
+            "badtext_params": "ADSK_Наименование, ADSK_Марка", 
             "bzero_name_param": "ADSK_Наименование", 
             "metal_thickness_param": "ADSK_Толщина стенки", 
             "size_name_size_param": "Размер", 
             "pipe_gost1_keyword": "3262-75", 
             "nested_vent_param2": "ADSK_Группирование", 
             "mep_source_param": "ADSK_Имя системы сокращенное", 
-            "proxy_ctrl_proxy_family": "PP_Прокси позиция 1", 
             "sort_order_categories": "OST_DuctCurves, OST_DuctFitting", 
+            "proxy_ctrl_proxy_family": "PP_Прокси позиция 1", 
             "pipe_gost2_size_param": "Внешний диаметр"
         }
     }, 
@@ -560,6 +560,11 @@
         "name": "О_Р_Отопление"
     }, 
     "heatloss_check_settings": {
+        "selected_keys": [
+            "numname_mismatch"
+        ], 
+        "last_selected_key": "numname_mismatch", 
+        "scope": "selection", 
         "config": {
             "numname_categories": "walls, curtain, windows, doors", 
             "numname_report_host": "да", 
@@ -568,12 +573,7 @@
             "numname_soft_compare": "да", 
             "numname_param": "PP_Номер имя помещения", 
             "numname_report_unreliable": "да"
-        }, 
-        "selected_keys": [
-            "numname_mismatch"
-        ], 
-        "scope": "selection", 
-        "last_selected_key": "numname_mismatch"
+        }
     }, 
     "mep_transfer_show_pyrevit_report": false, 
     "telemetry_dir": "C:\\Users\\My PC\\AppData\\Roaming\\pyRevit-Master\\extensions\\PP_Tools.extension\\telemetry"
