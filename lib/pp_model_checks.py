@@ -26,6 +26,7 @@ from Autodesk.Revit.DB import (
     ElementId,
     FilteredElementCollector,
     InsulationLiningBase,
+    Level,
     StorageType,
     View,
     ViewType,
@@ -99,6 +100,29 @@ DEFAULT_MODEL_CONFIG = {
     "grids_halftone_expected": u"да",
     "grids_tpl_include": u"",
     "grids_tpl_exclude": u"",
+    # Проверка «Расстояние между ДП и ДВ (противодымная вентиляция)».
+    # Маски через ; — по ним элемент относится к притоку (ДП) или к
+    # вытяжке/дымоудалению (ДВ). Регистр не важен, сравнение по вхождению.
+    "smoke_supply_masks": u"ДП",
+    "smoke_exhaust_masks": u"ДВ",
+    # Минимальное расстояние между притоком и вытяжкой, мм (норма — 5 м).
+    "smoke_min_distance_mm": u"5000",
+    "smoke_categories": u"OST_MechanicalEquipment",
+    # Если имя системы пустое — искать маски в имени типа/семейства.
+    "smoke_name_fallback": u"да",
+    # Проверка «Высота дымоприёмного устройства».
+    # В модели это обычно решётка (воздухораспределитель), надетая
+    # на клапан дымоудаления, поэтому категория по умолчанию — воздухораспределители.
+    "inlet_categories": u"OST_DuctTerminal",
+    # Маски через ; — какие элементы считаем дымоприёмными.
+    "inlet_masks": u"ДУ; ДВ",
+    # Норма: низ устройства не ниже верха дверного проёма (~2100 мм).
+    "inlet_min_height_mm": u"2100",
+    # Если отметка уровня — конструктив, а не чистый пол: поправка в мм.
+    "inlet_floor_offset_mm": u"0",
+    # База отсчёта низа: «габарит» или «точка вставки».
+    "inlet_base": u"габарит",
+    "inlet_name_fallback": u"да",
 }
 
 
@@ -190,6 +214,37 @@ ORPHAN_DEFAULT_KEYS = [
     u"OST_DuctAccessory",
     u"OST_DuctTerminal",
 ]
+
+
+# Категории для проверки «Расстояние между ДП и ДВ».
+SMOKE_CATEGORY_OPTIONS = [
+    (u"OST_MechanicalEquipment", u"Оборудование", BuiltInCategory.OST_MechanicalEquipment),
+    (u"OST_DuctTerminal", u"Воздухораспределители", BuiltInCategory.OST_DuctTerminal),
+    (u"OST_DuctAccessory", u"Арматура воздуховодов", BuiltInCategory.OST_DuctAccessory),
+    (u"OST_DuctCurves", u"Воздуховоды", BuiltInCategory.OST_DuctCurves),
+]
+
+SMOKE_CATEGORY_MAP = {
+    key: built_in for key, _label, built_in in SMOKE_CATEGORY_OPTIONS
+}
+
+SMOKE_DEFAULT_KEYS = [u"OST_MechanicalEquipment"]
+
+
+# Категории для проверки «Высота дымоприёмного устройства».
+# Обычно это решётка на клапане, поэтому воздухораспределители идут
+# первыми и единственные отмечены по умолчанию.
+INLET_CATEGORY_OPTIONS = [
+    (u"OST_DuctTerminal", u"Воздухораспределители", BuiltInCategory.OST_DuctTerminal),
+    (u"OST_MechanicalEquipment", u"Оборудование", BuiltInCategory.OST_MechanicalEquipment),
+    (u"OST_DuctAccessory", u"Арматура воздуховодов", BuiltInCategory.OST_DuctAccessory),
+]
+
+INLET_CATEGORY_MAP = {
+    key: built_in for key, _label, built_in in INLET_CATEGORY_OPTIONS
+}
+
+INLET_DEFAULT_KEYS = [u"OST_DuctTerminal"]
 
 
 # --------------------------------------------------------------------------- #
@@ -443,6 +498,65 @@ def get_check_option_definitions():
             u"Исключить шаблоны (маски имён через ;)",
             ["grids_halftone"]
         ),
+        CheckOptionDefinition(
+            "smoke_categories",
+            u"Категории для проверки",
+            ["smoke_distance"],
+            option_type=u"category_multiselect",
+            choices=[(key, label) for key, label, _b in SMOKE_CATEGORY_OPTIONS]
+        ),
+        CheckOptionDefinition(
+            "smoke_supply_masks",
+            u"Приток противодымной — маски имён через ; (напр. ДП)",
+            ["smoke_distance"]
+        ),
+        CheckOptionDefinition(
+            "smoke_exhaust_masks",
+            u"Вытяжка противодымной — маски имён через ; (напр. ДВ)",
+            ["smoke_distance"]
+        ),
+        CheckOptionDefinition(
+            "smoke_min_distance_mm",
+            u"Минимальное расстояние, мм",
+            ["smoke_distance"]
+        ),
+        CheckOptionDefinition(
+            "smoke_name_fallback",
+            u"Если системы нет — искать маски в имени типа (да/нет)",
+            ["smoke_distance"]
+        ),
+        CheckOptionDefinition(
+            "inlet_categories",
+            u"Категории для проверки",
+            ["smoke_inlet_height"],
+            option_type=u"category_multiselect",
+            choices=[(key, label) for key, label, _b in INLET_CATEGORY_OPTIONS]
+        ),
+        CheckOptionDefinition(
+            "inlet_masks",
+            u"Дымоприёмные устройства — маски имён через ; (напр. ДУ; ДВ)",
+            ["smoke_inlet_height"]
+        ),
+        CheckOptionDefinition(
+            "inlet_min_height_mm",
+            u"Минимальная высота низа от пола, мм",
+            ["smoke_inlet_height"]
+        ),
+        CheckOptionDefinition(
+            "inlet_floor_offset_mm",
+            u"Поправка «уровень → чистый пол», мм",
+            ["smoke_inlet_height"]
+        ),
+        CheckOptionDefinition(
+            "inlet_base",
+            u"База отсчёта низа: габарит / точка вставки",
+            ["smoke_inlet_height"]
+        ),
+        CheckOptionDefinition(
+            "inlet_name_fallback",
+            u"Если системы нет — искать маски в имени типа (да/нет)",
+            ["smoke_inlet_height"]
+        ),
     ]
 
 
@@ -607,6 +721,56 @@ def get_check_definitions():
                 "grids_halftone_expected",
                 "grids_tpl_include",
                 "grids_tpl_exclude",
+            ],
+            kind=u"report",
+        ),
+        CheckDefinition(
+            "smoke_distance",
+            u"12. Расстояние между ДП и ДВ (противодымная)",
+            u"Проверяет разрыв между приточной противодымной вентиляцией (ДП) "
+            u"и вытяжной / дымоудалением (ДВ): расстояние по прямой должно быть "
+            u"не меньше заданного (по умолчанию 5000 мм). Элемент относится к ДП "
+            u"или ДВ по маскам в имени системы; если имя системы пустое (частый "
+            u"случай у крышных вентиляторов), маска ищется в имени типа или "
+            u"семейства — это отключается полем «да/нет». Сравниваются только "
+            u"пары приток↔вытяжка, внутри одной группы расстояние не "
+            u"проверяется. Элементы, попавшие сразу под обе маски или ни под "
+            u"одну, пропускаются.",
+            runner=_run_smoke_distance_check,
+            option_keys=[
+                "smoke_categories",
+                "smoke_supply_masks",
+                "smoke_exhaust_masks",
+                "smoke_min_distance_mm",
+                "smoke_name_fallback",
+            ],
+            kind=u"report",
+        ),
+        CheckDefinition(
+            "smoke_inlet_height",
+            u"13. Высота дымоприёмного устройства",
+            u"Проверяет, что низ дымоприёмного устройства не опускается ниже "
+            u"заданной отметки от пола (по умолчанию 2100 мм — верх дверного "
+            u"проёма). В модели дымоприёмное устройство — обычно решётка на "
+            u"клапане дымоудаления, поэтому по умолчанию проверяются "
+            u"Воздухораспределители, а отбор внутри категории идёт по маскам "
+            u"имени системы (если системы нет — по имени типа или семейства; "
+            u"маска должна начинать слово, поэтому «ДУ» ловит «ДУ1», но не "
+            u"«возДУхораспределитель»). "
+            u"Высота считается от отметки уровня до низа элемента: низ берётся "
+            u"по габариту (рамка решётки) либо по точке вставки. Если уровни в "
+            u"модели заданы по конструктиву, разницу до чистого пола укажите "
+            u"полем «поправка». Когда уровень элемента оказывается выше самого "
+            u"элемента (привязка не к своему этажу), берётся ближайший уровень "
+            u"снизу.",
+            runner=_run_smoke_inlet_height_check,
+            option_keys=[
+                "inlet_categories",
+                "inlet_masks",
+                "inlet_min_height_mm",
+                "inlet_floor_offset_mm",
+                "inlet_base",
+                "inlet_name_fallback",
             ],
             kind=u"report",
         ),
@@ -1799,3 +1963,383 @@ def _run_grids_halftone_check(doc, config, cache):
                        checked, issues)
 
 
+# --------------------------------------------------------------------------- #
+#         проверка №12: расстояние между ДП и ДВ противодымной (report)       #
+# --------------------------------------------------------------------------- #
+
+def _element_points(element):
+    """Характерные точки элемента: точка вставки либо концы и середина оси."""
+    point = _location_point(element)
+    if point is not None:
+        return [point]
+
+    curve = _location_curve(element)
+    if curve is None:
+        return []
+
+    points = []
+    try:
+        points.append(curve.GetEndPoint(0))
+        points.append(curve.GetEndPoint(1))
+    except:
+        return []
+    try:
+        points.append(curve.Evaluate(0.5, True))
+    except:
+        pass
+    return points
+
+
+def _min_distance_ft(points_a, points_b):
+    """Минимальное расстояние (футы) между двумя наборами точек."""
+    best = None
+    for point_a in points_a:
+        for point_b in points_b:
+            try:
+                distance = point_a.DistanceTo(point_b)
+            except:
+                continue
+            if best is None or distance < best:
+                best = distance
+    return best
+
+
+def _smoke_search_text(doc, element, use_name_fallback):
+    """(текст для поиска масок, имя системы). Пустой текст = элемент пропускаем."""
+    system_name = _pipe_system_name(element)
+    if system_name:
+        return system_name, system_name
+    if not use_name_fallback:
+        return u"", u""
+
+    parts = []
+    type_name = _type_name(doc, element)
+    if type_name:
+        parts.append(type_name)
+    own_name = _safe_name(element)
+    if own_name and own_name not in parts:
+        parts.append(own_name)
+    return u" ".join(parts), u""
+
+
+def _smoke_label(element, display_name):
+    """Подпись элемента: категория, имя системы (или типа) и id."""
+    parts = []
+    try:
+        if element.Category is not None:
+            parts.append(element.Category.Name)
+    except:
+        pass
+    if display_name:
+        parts.append(u"«{0}»".format(display_name))
+    try:
+        parts.append(u"id {0}".format(element.Id.IntegerValue))
+    except:
+        pass
+    return u", ".join(parts) if parts else u"элемент"
+
+
+def _run_smoke_distance_check(doc, config, cache):
+    supply_masks = _parse_masks(config.get("smoke_supply_masks")) or [u"дп"]
+    exhaust_masks = _parse_masks(config.get("smoke_exhaust_masks")) or [u"дв"]
+    use_name_fallback = _is_yes(config.get("smoke_name_fallback"))
+
+    min_mm = _parse_float(config.get("smoke_min_distance_mm"), 5000.0)
+    if min_mm <= 0:
+        min_mm = 5000.0
+    min_ft = min_mm / FEET_TO_MM
+
+    categories = _parse_category_map(
+        config.get("smoke_categories"), SMOKE_CATEGORY_MAP, SMOKE_DEFAULT_KEYS)
+    elements = cache.get_by_categories(categories)
+
+    supply = []
+    exhaust = []
+    for element in elements:
+        search_text, system_name = _smoke_search_text(
+            doc, element, use_name_fallback)
+        if not search_text:
+            continue
+
+        is_supply = _matches_any(search_text, supply_masks)
+        is_exhaust = _matches_any(search_text, exhaust_masks)
+        # Ни одна маска не подошла или подошли обе — судить нельзя, пропускаем.
+        if is_supply == is_exhaust:
+            continue
+
+        points = _element_points(element)
+        if not points:
+            continue
+
+        try:
+            element_id = element.Id.IntegerValue
+        except:
+            continue
+
+        display = system_name or search_text
+        record = (element, display, points, element_id)
+        if is_supply:
+            supply.append(record)
+        else:
+            exhaust.append(record)
+
+    found = []
+    for s_element, s_display, s_points, s_id in supply:
+        for e_element, e_display, e_points, e_id in exhaust:
+            distance = _min_distance_ft(s_points, e_points)
+            if distance is None or distance >= min_ft:
+                continue
+            found.append((distance, s_element, s_display, s_id,
+                          e_element, e_display, e_id))
+
+    found.sort(key=lambda item: item[0])
+
+    issues = []
+    for distance, s_element, s_display, s_id, e_element, e_display, e_id in found:
+        issues.append(CheckIssue(
+            u"{0} м (норма {1} м) — ДП: {2}; ДВ: {3}".format(
+                _format_metres(distance * FEET_TO_MM),
+                _format_metres(min_mm),
+                _smoke_label(s_element, s_display),
+                _smoke_label(e_element, e_display)),
+            [s_id, e_id]))
+
+    info = u"Приток (ДП): {0}, вытяжка (ДВ): {1}, проверено пар: {2}".format(
+        len(supply), len(exhaust), len(supply) * len(exhaust))
+    if not supply or not exhaust:
+        info += (u". Одна из групп пуста — проверьте маски имён "
+                 u"и категории в настройках проверки")
+
+    return CheckResult(u"smoke_distance",
+                       u"12. Расстояние между ДП и ДВ (противодымная)",
+                       len(supply) + len(exhaust), issues, info)
+
+
+def _format_metres(value_mm):
+    try:
+        return (u"{0:.2f}".format(value_mm / 1000.0)).replace(u".", u",")
+    except:
+        return u"?"
+
+
+# --------------------------------------------------------------------------- #
+#     проверка №13: высота дымоприёмного устройства над полом (report)        #
+# --------------------------------------------------------------------------- #
+
+def _collect_levels(doc):
+    """Список (отметка в футах, имя) всех уровней модели, по возрастанию."""
+    levels = []
+    try:
+        collector = FilteredElementCollector(doc).OfClass(Level) \
+            .WhereElementIsNotElementType()
+        for level in collector.ToElements():
+            try:
+                levels.append((level.Elevation, _safe_name(level)))
+            except:
+                pass
+    except:
+        pass
+    levels.sort(key=lambda item: item[0])
+    return levels
+
+
+def _element_level(doc, element):
+    """(отметка в футах, имя) уровня элемента или (None, u"")."""
+    level_id = None
+    try:
+        level_id = element.LevelId
+    except:
+        level_id = None
+
+    if level_id is None or level_id == ElementId.InvalidElementId:
+        # У разных семейств уровень лежит в разных BIP, набор разнится по
+        # версиям Revit — поэтому перебираем через getattr.
+        for name in (u"FAMILY_LEVEL_PARAM",
+                     u"INSTANCE_SCHEDULE_ONLY_LEVEL_PARAM",
+                     u"SCHEDULE_LEVEL_PARAM",
+                     u"RBS_START_LEVEL_PARAM"):
+            built_in = getattr(BuiltInParameter, name, None)
+            if built_in is None:
+                continue
+            try:
+                param = element.get_Parameter(built_in)
+                if param is None or not param.HasValue:
+                    continue
+                candidate = param.AsElementId()
+                if (candidate is not None
+                        and candidate != ElementId.InvalidElementId):
+                    level_id = candidate
+                    break
+            except:
+                pass
+
+    if level_id is None or level_id == ElementId.InvalidElementId:
+        return None, u""
+
+    try:
+        level = doc.GetElement(level_id)
+    except:
+        return None, u""
+    if level is None:
+        return None, u""
+    try:
+        return level.Elevation, _safe_name(level)
+    except:
+        return None, u""
+
+
+def _nearest_level_below(levels, z_ft, tolerance_ft):
+    """Ближайший уровень на отметке элемента или ниже неё."""
+    best = None
+    for elevation, name in levels:
+        if elevation > z_ft + tolerance_ft:
+            continue
+        if best is None or elevation > best[0]:
+            best = (elevation, name)
+    if best is None:
+        return None, u""
+    return best
+
+
+def _element_bottom_z(element, use_point):
+    """Отметка низа элемента в футах: габарит или точка вставки."""
+    if use_point:
+        point = _location_point(element)
+        if point is not None:
+            return point.Z
+
+    try:
+        box = element.get_BoundingBox(None)
+    except:
+        box = None
+    if box is not None:
+        try:
+            return box.Min.Z
+        except:
+            pass
+
+    point = _location_point(element)
+    if point is not None:
+        return point.Z
+    return None
+
+
+def _is_point_base(raw_text):
+    """«точка вставки» / «вставка» / «point» = считать по точке вставки."""
+    text = unicode(raw_text or u"").strip().lower()
+    if not text:
+        return False
+    return (text.startswith(u"точ") or text.startswith(u"вст")
+            or text.startswith(u"point"))
+
+
+def _format_mm(value_mm):
+    try:
+        return u"{0:.0f}".format(value_mm)
+    except:
+        return u"?"
+
+
+def _matches_word_start(text, masks):
+    """Маска должна начинать слово: «ДУ1» подходит, «воздуховод» — нет.
+
+    Обычное сравнение по вхождению здесь опасно: маска «ДУ» находится
+    внутри слова «возДУхораспределитель», а имя типа мы как раз
+    просматриваем, когда у элемента нет системы."""
+    low = (text or u"").lower()
+    for mask in masks:
+        if not mask:
+            continue
+        start = 0
+        while True:
+            index = low.find(mask, start)
+            if index < 0:
+                break
+            previous = low[index - 1] if index > 0 else u""
+            if not previous or not (previous.isalpha() or previous.isdigit()):
+                return True
+            start = index + 1
+    return False
+
+
+def _run_smoke_inlet_height_check(doc, config, cache):
+    masks = _parse_masks(config.get("inlet_masks")) or [u"ду"]
+    use_name_fallback = _is_yes(config.get("inlet_name_fallback"))
+    use_point = _is_point_base(config.get("inlet_base"))
+
+    min_mm = _parse_float(config.get("inlet_min_height_mm"), 2100.0)
+    if min_mm <= 0:
+        min_mm = 2100.0
+    floor_offset_mm = _parse_float(config.get("inlet_floor_offset_mm"), 0.0)
+
+    categories = _parse_category_map(
+        config.get("inlet_categories"), INLET_CATEGORY_MAP, INLET_DEFAULT_KEYS)
+    elements = cache.get_by_categories(categories)
+
+    levels = _collect_levels(doc)
+    # Допуск, чтобы элемент ровно на отметке уровня не «проваливался» ниже.
+    tolerance_ft = 10.0 / FEET_TO_MM
+
+    checked = 0
+    skipped_no_level = 0
+    found = []
+    for element in elements:
+        search_text, system_name = _smoke_search_text(
+            doc, element, use_name_fallback)
+        if not search_text or not _matches_word_start(search_text, masks):
+            continue
+
+        z_ft = _element_bottom_z(element, use_point)
+        if z_ft is None:
+            continue
+
+        elevation, level_name = _element_level(doc, element)
+        # Уровень выше самого элемента = привязка не к своему этажу,
+        # иначе высота ушла бы в минус. Берём ближайший уровень снизу.
+        if elevation is None or elevation > z_ft + tolerance_ft:
+            elevation, level_name = _nearest_level_below(
+                levels, z_ft, tolerance_ft)
+
+        if elevation is None:
+            skipped_no_level += 1
+            continue
+
+        checked += 1
+        height_mm = (z_ft - elevation) * FEET_TO_MM - floor_offset_mm
+        if height_mm >= min_mm:
+            continue
+
+        try:
+            element_id = element.Id.IntegerValue
+        except:
+            continue
+
+        display = system_name or search_text
+        found.append((height_mm, element, display, level_name, element_id))
+
+    found.sort(key=lambda item: item[0])
+
+    issues = []
+    for height_mm, element, display, level_name, element_id in found:
+        issues.append(CheckIssue(
+            u"{0} мм от пола (норма {1} мм) — {2}, уровень «{3}»".format(
+                _format_mm(height_mm),
+                _format_mm(min_mm),
+                _smoke_label(element, display),
+                level_name or u"?"),
+            [element_id]))
+
+    info = u"Дымоприёмных устройств найдено: {0}".format(checked)
+    if not checked:
+        info += (u". Ни один элемент не подошёл — проверьте маски имён "
+                 u"и категории в настройках проверки")
+    if skipped_no_level:
+        info += u". Без уровня, пропущено: {0}".format(skipped_no_level)
+    if use_point:
+        info += u". База отсчёта — точка вставки"
+    if floor_offset_mm:
+        info += u". Поправка пола: {0} мм".format(_format_mm(floor_offset_mm))
+
+    return CheckResult(u"smoke_inlet_height",
+                       u"13. Высота дымоприёмного устройства",
+                       checked, issues, info)
