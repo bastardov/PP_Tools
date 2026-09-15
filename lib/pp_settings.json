@@ -485,6 +485,24 @@
         "Расходник"
     ], 
     "spec_check_settings": {
+        "selected_keys": [
+            "name_presence", 
+            "quantity_presence", 
+            "duct_bzero", 
+            "duct_metal_thickness", 
+            "copper_pipe_sizes", 
+            "system_grouping", 
+            "sort_order", 
+            "mep_name_match", 
+            "size_in_name", 
+            "pipe_size_in_name", 
+            "proxy_controller", 
+            "forbidden_text", 
+            "param_rules", 
+            "nested_heat", 
+            "nested_vent"
+        ], 
+        "last_selected_key": "nested_vent", 
         "config": {
             "proxy_ctrl_code_param": "PP_Код правила", 
             "copper_standard_sizes_mm": "6, 8, 10, 12, 15, 18, 22, 28, 35, 42, 54, 64, 76, 89, 108", 
@@ -535,32 +553,13 @@
             "proxy_ctrl_proxy_family": "PP_Прокси позиция 1", 
             "sort_order_categories": "OST_DuctCurves, OST_DuctFitting", 
             "pipe_gost2_size_param": "Внешний диаметр"
-        }, 
-        "selected_keys": [
-            "name_presence", 
-            "quantity_presence", 
-            "duct_bzero", 
-            "duct_metal_thickness", 
-            "copper_pipe_sizes", 
-            "system_grouping", 
-            "sort_order", 
-            "mep_name_match", 
-            "size_in_name", 
-            "pipe_size_in_name", 
-            "proxy_controller", 
-            "forbidden_text", 
-            "param_rules", 
-            "nested_heat", 
-            "nested_vent"
-        ], 
-        "last_selected_key": "nested_vent"
+        }
     }, 
     "create_section_from_3d_template": {
         "id": 74853, 
         "name": "О_Р_Отопление"
     }, 
     "heatloss_check_settings": {
-        "last_selected_key": "numname_mismatch", 
         "config": {
             "numname_categories": "walls, curtain, windows, doors", 
             "numname_report_host": "да", 
@@ -570,10 +569,11 @@
             "numname_param": "PP_Номер имя помещения", 
             "numname_report_unreliable": "да"
         }, 
-        "scope": "selection", 
         "selected_keys": [
             "numname_mismatch"
-        ]
+        ], 
+        "scope": "selection", 
+        "last_selected_key": "numname_mismatch"
     }, 
     "mep_transfer_show_pyrevit_report": false, 
     "telemetry_dir": "C:\\Users\\My PC\\AppData\\Roaming\\pyRevit-Master\\extensions\\PP_Tools.extension\\telemetry"
