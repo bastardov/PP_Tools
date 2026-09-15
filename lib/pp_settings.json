@@ -1,4 +1,5 @@
 {
+    "sheet_section_param": "ADSK_Штамп Раздел проекта", 
     "tag_size_active": "Основной", 
     "sheet_name_prefixes": [
         "Изометрическая схема систем", 
@@ -15,7 +16,9 @@
         "ОВ = Отопление и вентиляция", 
         "ПД = Противодымная вентиляция", 
         "ВК = Водоснабжение и канализация", 
-        "Кондиционирование= Кондиционирование"
+        "Кондиционирование= Кондиционирование", 
+        "ЭЛ = Задание ЭЛ", 
+        "АПС = Задание АПС"
     ], 
     "proxy_rule_codes": [
         "РУЧНАЯ_ПОЗИЦИЯ", 
@@ -112,34 +115,10 @@
         "Тех этаж= План Тех этажа", 
         "Паркинг= План паркинга"
     ], 
+    "space_airflow_settings": {}, 
     "_schema_version": 1, 
     "heatloss_show_report": false, 
     "model_check_settings": {
-        "config": {
-            "insul_include_systems": "", 
-            "near_tolerance_mm": "5", 
-            "insul_exclude_systems": "", 
-            "grids_tpl_include": "", 
-            "orphan_categories": "OST_PipeAccessory, OST_PipeFitting, OST_MechanicalEquipment, OST_DuctAccessory, OST_DuctTerminal, OST_DuctFitting", 
-            "pipe_flow_param": "", 
-            "degenerate_tolerance_mm": "1", 
-            "duplicate_tolerance_mm": "10", 
-            "pipe_flow_include_systems": "Т11; Т21", 
-            "grids_halftone_expected": "да", 
-            "slope_tolerance": "0.01", 
-            "position_param": "ADSK_Позиция", 
-            "slope_param": "Уклон", 
-            "pipe_flow_exclude_systems": "", 
-            "short_segment_mm": "100", 
-            "slope_exclude_values": "0; 100; 57.7350; 173.2051", 
-            "insul_report_unclassified": "нет", 
-            "grids_tpl_exclude": "", 
-            "duplicate_categories": "OST_MechanicalEquipment, OST_PipeAccessory, OST_DuctAccessory, OST_PipeCurves, OST_DuctCurves", 
-            "short_segment_categories": "OST_PipeCurves, OST_DuctCurves", 
-            "insul_rules": "ГОСТ 10704; ГОСТ 3262 => Цилиндры некашированные\nПолиэтилен сшитый; PE-Xa; PPR; PP-R => Трубки теплоизоляционные", 
-            "orphan_include_partial": "нет", 
-            "duplicate_same_type": "да"
-        }, 
         "selected_keys": [
             "pipe_flow_missing", 
             "slope_unexpected", 
@@ -151,9 +130,47 @@
             "pipe_insulation", 
             "position_wrong_category", 
             "position_duplicate", 
-            "grids_halftone"
+            "grids_halftone", 
+            "smoke_distance", 
+            "smoke_inlet_height"
         ], 
-        "last_selected_key": "grids_halftone"
+        "last_selected_key": "smoke_distance", 
+        "config": {
+            "insul_include_systems": "", 
+            "near_tolerance_mm": "5", 
+            "smoke_exhaust_masks": "ДВ", 
+            "insul_exclude_systems": "", 
+            "grids_tpl_include": "", 
+            "smoke_categories": "OST_MechanicalEquipment", 
+            "inlet_name_fallback": "да", 
+            "orphan_categories": "OST_PipeAccessory, OST_PipeFitting, OST_MechanicalEquipment, OST_DuctAccessory, OST_DuctTerminal, OST_DuctFitting", 
+            "smoke_name_fallback": "да", 
+            "pipe_flow_param": "", 
+            "smoke_min_distance_mm": "5000", 
+            "inlet_masks": "ДУ; ДВ", 
+            "degenerate_tolerance_mm": "1", 
+            "duplicate_tolerance_mm": "10", 
+            "pipe_flow_include_systems": "Т11; Т21", 
+            "grids_halftone_expected": "да", 
+            "smoke_supply_masks": "ДП", 
+            "inlet_min_height_mm": "2100", 
+            "slope_tolerance": "0.01", 
+            "inlet_floor_offset_mm": "0", 
+            "position_param": "ADSK_Позиция", 
+            "slope_param": "Уклон", 
+            "pipe_flow_exclude_systems": "", 
+            "short_segment_mm": "100", 
+            "slope_exclude_values": "0; 100; 57.7350; 173.2051", 
+            "inlet_base": "габарит", 
+            "insul_report_unclassified": "нет", 
+            "inlet_categories": "OST_DuctTerminal", 
+            "grids_tpl_exclude": "", 
+            "duplicate_categories": "OST_MechanicalEquipment, OST_PipeAccessory, OST_DuctAccessory, OST_PipeCurves, OST_DuctCurves", 
+            "short_segment_categories": "OST_PipeCurves, OST_DuctCurves", 
+            "insul_rules": "ГОСТ 10704; ГОСТ 3262 => Цилиндры некашированные\nПолиэтилен сшитый; PE-Xa; PPR; PP-R => Трубки теплоизоляционные", 
+            "orphan_include_partial": "нет", 
+            "duplicate_same_type": "да"
+        }
     }, 
     "tag_rules": [
         {
@@ -379,11 +396,46 @@
             "type": null, 
             "tag_family": "ADSK_M_Воздухораспределители", 
             "leader": false
+        }, 
+        {
+            "family": "NED_Наружный блок ND-OH-685B-PRO-Х_ND-OH-1120B-PRO-Х", 
+            "cat": "OST_MechanicalEquipment", 
+            "tag_type": "Позиция/марка 33", 
+            "type": null, 
+            "tag_family": "ADSK_M_Оборудование", 
+            "leader": false
+        }, 
+        {
+            "family": "NED_Наружный блок ND-OH-255B-PRO-Х_ND-OH-615B-PRO-Х", 
+            "cat": "OST_MechanicalEquipment", 
+            "tag_type": "Позиция/марка 33", 
+            "type": null, 
+            "tag_family": "ADSK_M_Оборудование", 
+            "leader": false
+        }, 
+        {
+            "family": "NED_НаружныйБлок_MINI_VRF_ND-OH-125B_140B_160B_180B_224B_260B_280M_335M-3X", 
+            "cat": "OST_MechanicalEquipment", 
+            "tag_type": "Позиция/марка 30", 
+            "type": null, 
+            "tag_family": "ADSK_M_Оборудование", 
+            "leader": false
         }
     ], 
     "show_success_report": false, 
     "pipe_pair_distance_mm": 600.0, 
     "detect_orientation": false, 
+    "tag_apply_categories": [
+        "OST_DuctAccessory", 
+        "OST_DuctCurves", 
+        "OST_DuctInsulations", 
+        "OST_DuctTerminal", 
+        "OST_GenericModel", 
+        "OST_MechanicalEquipment", 
+        "OST_PipeAccessory", 
+        "OST_PipeCurves", 
+        "OST_PipeInsulations"
+    ], 
     "mep_param_transfer_settings": {
         "chain_fill": true, 
         "receiver_param": "ADSK_Система_Имя", 
@@ -425,17 +477,6 @@
             "enabled": false
         }
     }, 
-    "tag_apply_categories": [
-        "OST_DuctAccessory", 
-        "OST_DuctCurves", 
-        "OST_DuctInsulations", 
-        "OST_DuctTerminal", 
-        "OST_GenericModel", 
-        "OST_MechanicalEquipment", 
-        "OST_PipeAccessory", 
-        "OST_PipeCurves", 
-        "OST_PipeInsulations"
-    ], 
     "proxy_position_types": [
         "Ручная позиция", 
         "Краска", 
@@ -444,7 +485,6 @@
         "Расходник"
     ], 
     "spec_check_settings": {
-        "last_selected_key": "nested_vent", 
         "config": {
             "proxy_ctrl_code_param": "PP_Код правила", 
             "copper_standard_sizes_mm": "6, 8, 10, 12, 15, 18, 22, 28, 35, 42, 54, 64, 76, 89, 108", 
@@ -512,18 +552,15 @@
             "param_rules", 
             "nested_heat", 
             "nested_vent"
-        ]
+        ], 
+        "last_selected_key": "nested_vent"
     }, 
     "create_section_from_3d_template": {
         "id": 74853, 
         "name": "О_Р_Отопление"
     }, 
     "heatloss_check_settings": {
-        "selected_keys": [
-            "numname_mismatch"
-        ], 
         "last_selected_key": "numname_mismatch", 
-        "scope": "selection", 
         "config": {
             "numname_categories": "walls, curtain, windows, doors", 
             "numname_report_host": "да", 
@@ -532,7 +569,11 @@
             "numname_soft_compare": "да", 
             "numname_param": "PP_Номер имя помещения", 
             "numname_report_unreliable": "да"
-        }
+        }, 
+        "scope": "selection", 
+        "selected_keys": [
+            "numname_mismatch"
+        ]
     }, 
     "mep_transfer_show_pyrevit_report": false, 
     "telemetry_dir": "C:\\Users\\My PC\\AppData\\Roaming\\pyRevit-Master\\extensions\\PP_Tools.extension\\telemetry"
