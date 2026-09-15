@@ -55,7 +55,8 @@ import pp_wpf  # первым: добавляет clr-ссылки на сбор
 from System import TimeSpan
 from System.Collections.ObjectModel import ObservableCollection
 from System.Windows import (
-    Application, GridLength, GridUnitType, TextWrapping, Thickness, Visibility
+    Application, GridLength, GridUnitType, TextWrapping, Thickness,
+    VerticalAlignment, Visibility
 )
 from System.Windows.Controls import (
     Border, Button, CheckBox, ColumnDefinition, Grid, ListBoxItem,
@@ -361,6 +362,9 @@ class SetupWindow(object):
 
         self.accepted = False
 
+        # Идёт групповое обновление флажков («Отметить все»): выбор не трогаем
+        self._syncing = False
+
         # option_key -> {"kind":..., "container":..., "control":..., "order":[...]}
         self.options = {}
 
@@ -378,7 +382,12 @@ class SetupWindow(object):
     # ---------- построение -------------------------------------------------
 
     def _build_checks(self):
-        u"""Строка = флажок запуска плюс выбор строки для показа её настроек."""
+        u"""Строка = флажок запуска плюс выбор строки для показа её настроек.
+
+        Подпись держим отдельным TextBlock, а не внутри флажка: иначе клик по
+        тексту попадал бы по CheckBox и переключал галочку вместо выбора строки.
+        Теперь галочку меняет только сам квадратик, вся остальная строка — выбор.
+        """
         box = self.window.FindName("LstChecks")
         check_style = style(u"PP.CheckBox")
 
@@ -386,15 +395,42 @@ class SetupWindow(object):
 
         for index, definition in enumerate(self.vm.definitions):
             check = CheckBox()
-            check.Content = definition.title
             check.IsChecked = self.vm.is_checked(index)
+            check.VerticalAlignment = VerticalAlignment.Center
+            check.ToolTip = u"Запускать эту проверку"
+
+            # Фокус оставляем списку: стрелки должны ходить по строкам
+            check.Focusable = False
 
             if check_style is not None:
                 check.Style = check_style
 
+            label = TextBlock()
+            label.Text = definition.title
+            label.TextWrapping = TextWrapping.Wrap
+            label.VerticalAlignment = VerticalAlignment.Center
+            label.Margin = Thickness(8, 0, 0, 0)
+
+            row = Grid()
+
+            col_box = ColumnDefinition()
+            col_box.Width = GridLength.Auto
+            col_label = ColumnDefinition()
+            col_label.Width = GridLength(1, GridUnitType.Star)
+
+            row.ColumnDefinitions.Add(col_box)
+            row.ColumnDefinitions.Add(col_label)
+
+            Grid.SetColumn(check, 0)
+            Grid.SetColumn(label, 1)
+
+            row.Children.Add(check)
+            row.Children.Add(label)
+
             item = ListBoxItem()
-            item.Content = check
-            item.ToolTip = u"Флажок — запускать ли. Клик по строке — показать её настройки."
+            item.Content = row
+            item.ToolTip = (u"Клик по строке — показать настройки проверки справа. "
+                            u"Галочка слева — запускать ли её.")
 
             box.Items.Add(item)
             self.check_boxes.append(check)
@@ -614,6 +650,12 @@ class SetupWindow(object):
             def handler(sender, args):
                 self.vm.set_checked(index, sender.IsChecked)
 
+                if self._syncing:
+                    return
+
+                # Клик по флажку сам строку не выделяет — покажем её настройки
+                self.window.FindName("LstChecks").SelectedIndex = index
+
             return handler
 
         for index in range(len(self.check_boxes)):
@@ -697,8 +739,13 @@ class SetupWindow(object):
 
     def _sync_check_boxes(self):
         u"""Кнопки «Отметить все» меняют состояние в VM — флажки нужно догнать."""
-        for index in range(len(self.check_boxes)):
-            self.check_boxes[index].IsChecked = self.vm.is_checked(index)
+        self._syncing = True
+
+        try:
+            for index in range(len(self.check_boxes)):
+                self.check_boxes[index].IsChecked = self.vm.is_checked(index)
+        finally:
+            self._syncing = False
 
     def _refresh_options(self):
         active = set(self.vm.active_option_keys())
