@@ -127,6 +127,22 @@
                        Text="К началу дописываются системы из имён видов, которые легли на лист: «Схема систем П1-П3, В1». Список — в панели «Настройки»."/>
           </StackPanel>
 
+          <TextBlock Style="{StaticResource FieldLabel}" Margin="0,14,0,0"
+                     Text="ОРИЕНТАЦИЯ ЛИСТА"/>
+          <WrapPanel Margin="0,6,0,0">
+            <RadioButton x:Name="ChipLandscape" Style="{StaticResource RadioButton.Chip}"
+                         GroupName="Orientation" Content="Альбомная" MinWidth="0" Margin="0,0,6,6"
+                         ToolTip="Только альбомные листы — галочка «Книжная ориентация» в рамке не ставится"/>
+            <RadioButton x:Name="ChipPortrait" Style="{StaticResource RadioButton.Chip}"
+                         GroupName="Orientation" Content="Книжная" MinWidth="0" Margin="0,0,6,6"
+                         ToolTip="Только книжные листы"/>
+            <RadioButton x:Name="ChipAnyOrientation" Style="{StaticResource RadioButton.Chip}"
+                         GroupName="Orientation" Content="Подобрать" MinWidth="0" Margin="0,0,6,6"
+                         ToolTip="Для каждого формата сначала альбомная, потом книжная — берётся меньший подходящий лист"/>
+          </WrapPanel>
+          <TextBlock x:Name="TxtOrientationHint" Style="{StaticResource Caption}" Margin="0,0,0,0"
+                     TextWrapping="Wrap"/>
+
           <ToggleButton x:Name="TglMargins" Style="{StaticResource ToggleButton.Expander}"
                         Margin="0,10,0,0" Content="Поля рамки и подбор формата"/>
           <StackPanel x:Name="PanelMargins" Margin="0,4,0,0"
@@ -167,9 +183,6 @@
                        Width="120" HorizontalAlignment="Left"/>
             </StackPanel>
 
-            <CheckBox x:Name="ChkPortrait" Style="{StaticResource PP.CheckBox}" Margin="0,8,0,0"
-                      Content="Пробовать и книжную ориентацию"
-                      ToolTip="Если вид вытянут вверх, книжный лист меньшего формата может подойти лучше альбомного"/>
           </StackPanel>
 
           <Border Style="{StaticResource Card.Result}" Margin="0,14,0,0">

@@ -30,6 +30,20 @@ MODE_VIEWS = u"views"
 
 NO_PREFIX = u"(без начала — только системы)"
 
+ORIENT_LANDSCAPE = u"landscape"
+ORIENT_PORTRAIT = u"portrait"
+ORIENT_ANY = u"any"
+
+# Ориентация -> (имя чипса, пояснение под чипсами)
+ORIENT_CHIPS = (
+    (ORIENT_LANDSCAPE, "ChipLandscape",
+     u"Только альбомные листы: галочка «Книжная ориентация» в рамке не ставится."),
+    (ORIENT_PORTRAIT, "ChipPortrait",
+     u"Только книжные листы: в рамке ставится «Книжная ориентация»."),
+    (ORIENT_ANY, "ChipAnyOrientation",
+     u"Для каждого формата сначала альбомная, потом книжная — берётся меньший подходящий лист."),
+)
+
 _NUMBER = re.compile(u"^\\s*(\\d+)\\s*$")
 
 MODE_TEXT = {
@@ -139,7 +153,7 @@ class PlaceWindow(object):
         taken_numbers — множество занятых номеров листов
         name_for      — fn(режим, [виды], начало имени) -> имя листа
         prefixes      — начала имени листа из настроек
-        defaults      — {mode, sample_id, suffix, margins, portrait, gap,
+        defaults      — {mode, sample_id, suffix, margins, orientation, gap,
                          prefix, current: {режим: подпись}}
         """
         self.window = pp_wpf.load_window_file(os.path.join(folder, XAML_FILE))
@@ -187,7 +201,6 @@ class PlaceWindow(object):
         find("TxtTop").Text = self._fmt(margins[2])
         find("TxtBottom").Text = self._fmt(margins[3])
         find("TxtGap").Text = self._fmt(defaults.get(u"gap", 10.0))
-        find("ChkPortrait").IsChecked = bool(defaults.get(u"portrait", True))
         find("TxtSuffix").Text = unicode(defaults.get(u"suffix") or u"")
 
         self._wire()
@@ -195,6 +208,7 @@ class PlaceWindow(object):
         # Начальное состояние — после подписок (UI.md, п. 18)
         self._apply_sample()
         self._reset_start()
+        self._set_orientation(defaults.get(u"orientation") or ORIENT_LANDSCAPE)
 
         mode = defaults.get(u"mode") or MODE_PLANS
         if not self.items.get(mode):
@@ -384,6 +398,11 @@ class PlaceWindow(object):
             self._refresh()
 
         @guard
+        def on_orientation(sender, args):
+            self._update_orientation_hint()
+            self._refresh()
+
+        @guard
         def on_run(sender, args):
             self._accept()
 
@@ -403,8 +422,8 @@ class PlaceWindow(object):
         for name in ("TxtLeft", "TxtRight", "TxtTop", "TxtBottom", "TxtGap"):
             find(name).TextChanged += on_any
 
-        find("ChkPortrait").Checked += on_any
-        find("ChkPortrait").Unchecked += on_any
+        for _value, chip_name, _hint in ORIENT_CHIPS:
+            find(chip_name).Checked += on_orientation
         find("BtnRun").Click += on_run
         find("BtnCancel").Click += on_cancel
 
@@ -491,6 +510,34 @@ class PlaceWindow(object):
             self._fail(u"Активный вид — не 3D-вид, разрез или фасад, "
                        u"или уже лежит на листе.")
 
+    def _set_orientation(self, value):
+        find = self.window.FindName
+
+        for chip_value, chip_name, _hint in ORIENT_CHIPS:
+            if chip_value == value:
+                find(chip_name).IsChecked = True
+                break
+        else:
+            find("ChipLandscape").IsChecked = True
+
+        self._update_orientation_hint()
+
+    def _orientation(self):
+        find = self.window.FindName
+
+        for value, chip_name, _hint in ORIENT_CHIPS:
+            if find(chip_name).IsChecked:
+                return value
+
+        return ORIENT_LANDSCAPE
+
+    def _update_orientation_hint(self):
+        current = self._orientation()
+
+        for value, _chip_name, hint in ORIENT_CHIPS:
+            if value == current:
+                self.window.FindName("TxtOrientationHint").Text = hint
+
     def _prefix(self):
         index = self.window.FindName("CmbPrefix").SelectedIndex
 
@@ -554,7 +601,7 @@ class PlaceWindow(object):
             u"margins": margins,
             u"gap": gap,
             u"prefix": self._prefix(),
-            u"portrait": bool(find("ChkPortrait").IsChecked)
+            u"orientation": self._orientation()
         }, None
 
     def _refresh(self):

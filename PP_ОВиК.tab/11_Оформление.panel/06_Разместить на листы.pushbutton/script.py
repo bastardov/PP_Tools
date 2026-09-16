@@ -100,9 +100,14 @@ ELONGATED = {
     0: (3,),
 }
 
-# Лист, на который переносятся виды, когда все не влезли никуда: самый
-# большой СТАНДАРТНЫЙ формат. Удлинённый лист частями выглядел бы странно.
-OVERFLOW_FORMAT = (0, 1, 0)
+# Ориентация листа из окна. «any» — перебирать обе, альбомную первой.
+ORIENT_LANDSCAPE = u"landscape"
+ORIENT_PORTRAIT = u"portrait"
+ORIENT_ANY = u"any"
+
+# Формат листа, на который переносятся виды, когда все не влезли никуда:
+# самый большой СТАНДАРТНЫЙ (А0). Удлинённый лист частями выглядел бы странно.
+OVERFLOW_FMT = 0
 
 NO_CROP = u"нет подрезки"
 
@@ -243,7 +248,7 @@ def load_defaults(lists, sheets):
     defaults = {
         u"margins": tuple(float(v) for v in margins),
         u"suffix": stored.get(u"suffix", u"ОВ"),
-        u"portrait": bool(stored.get(u"portrait", True)),
+        u"orientation": stored_orientation(stored),
         u"gap": float(stored.get(u"gap", 10.0)),
         u"prefix": stored.get(u"prefix"),
         u"mode": stored.get(u"mode", MODE_PLANS),
@@ -274,11 +279,25 @@ def load_defaults(lists, sheets):
     return settings, defaults
 
 
+def stored_orientation(stored):
+    u"""Ориентация из настроек. Старые запуски хранили галочку portrait:
+    стояла — «подобрать», снята — «альбомная». По умолчанию — альбомная."""
+    value = stored.get(u"orientation")
+
+    if value in (ORIENT_LANDSCAPE, ORIENT_PORTRAIT, ORIENT_ANY):
+        return value
+
+    if u"portrait" in stored:
+        return ORIENT_ANY if stored.get(u"portrait") else ORIENT_LANDSCAPE
+
+    return ORIENT_LANDSCAPE
+
+
 def store_defaults(settings, options):
     settings[SETTINGS_KEY] = {
         u"margins": list(options[u"margins"]),
         u"suffix": options[u"suffix"],
-        u"portrait": options[u"portrait"],
+        u"orientation": options[u"orientation"],
         u"gap": options[u"gap"],
         u"prefix": options[u"prefix"],
         u"mode": options[u"mode"],
@@ -334,9 +353,19 @@ def bbox_mm(element, view):
     return box.Min.X * MM, box.Min.Y * MM, box.Max.X * MM, box.Max.Y * MM
 
 
-def format_candidates(portrait_too):
+def orientations_for(orientation):
+    if orientation == ORIENT_PORTRAIT:
+        return (1,)
+
+    if orientation == ORIENT_ANY:
+        return (0, 1)
+
+    return (0,)
+
+
+def format_candidates(orientation):
     u"""[(формат, кратность, книжная), ...] в порядке возрастания площади."""
-    orientations = (0, 1) if portrait_too else (0,)
+    orientations = orientations_for(orientation)
     candidates = []
 
     for fmt in (3, 2, 1, 0):
@@ -358,8 +387,15 @@ def format_candidates(portrait_too):
     return candidates
 
 
-def largest_landscape(candidates):
-    return [item for item in candidates if not item[2]][-1]
+def largest_format(candidates):
+    u"""Самый большой из перебираемых — в предпочтительной ориентации
+    (при «подобрать» — альбомный)."""
+    preferred = candidates[0][2]
+    return [item for item in candidates if item[2] == preferred][-1]
+
+
+def overflow_format(run):
+    return (OVERFLOW_FMT, 1, run.candidates[0][2])
 
 
 def describe_format(fmt, mult, portrait):
@@ -530,7 +566,7 @@ class Run(object):
         self.taken = set(taken)
         self.next_value = options[u"start"]
         self.viewport_type = sample_viewport_type(options[u"sample"])
-        self.candidates = format_candidates(options[u"portrait"])
+        self.candidates = format_candidates(options[u"orientation"])
         self.created = []    # [(лист, формат, число видов)]
         self.warnings = []
         self.done = set()      # id видов, легших на листы
@@ -605,7 +641,7 @@ def place_plan(run, view):
             break
 
     if chosen is None:
-        chosen = largest_landscape(run.candidates)
+        chosen = largest_format(run.candidates)
         apply_format(title_block, *chosen)
         run.warnings.append(
             u"{0}: план {1:.0f}×{2:.0f} мм не поместился ни на один формат — "
@@ -671,7 +707,7 @@ def place_views_sheet(run, views):
 
     if chosen is None:
         # Все не влезли никуда — заполняем стандартный А0, остальное дальше
-        candidate = OVERFLOW_FORMAT
+        candidate = overflow_format(run)
         apply_format(title_block, *candidate)
         area = work_area(title_block, sheet, margins)
         rows, placed = pp_place_layout.pack_rows(
@@ -690,7 +726,7 @@ def place_views_sheet(run, views):
                     break
 
             if candidate is None:
-                candidate = largest_landscape(run.candidates)
+                candidate = largest_format(run.candidates)
                 apply_format(title_block, *candidate)
                 area = work_area(title_block, sheet, margins)
                 run.warnings.append(
