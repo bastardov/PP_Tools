@@ -74,9 +74,15 @@
                         VerticalContentAlignment="Stretch"/>
       </Grid>
 
-      <!-- ===== Правая колонка: как оформить ===== -->
-      <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"
-                    HorizontalScrollBarVisibility="Disabled">
+      <!-- ===== Правая колонка: как оформить; итог закреплён внизу ===== -->
+      <Grid Grid.Column="1">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="*"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
         <StackPanel>
 
           <TextBlock Style="{StaticResource FieldLabel}" Text="ЛИСТ-ОБРАЗЕЦ"/>
@@ -143,6 +149,92 @@
           <TextBlock x:Name="TxtOrientationHint" Style="{StaticResource Caption}" Margin="0,0,0,0"
                      TextWrapping="Wrap"/>
 
+          <!-- ===== Заголовки видов ===== -->
+          <TextBlock Style="{StaticResource FieldLabel}" Margin="0,14,0,0"
+                     Text="ЗАГОЛОВКИ ВИДОВ"/>
+          <ComboBox x:Name="CmbTitleType" Style="{StaticResource PP.ComboBox}"
+                    Margin="0,6,0,0"
+                    ToolTip="Тип видового экрана: семейство заголовка, линия, показывать ли заголовок"/>
+          <TextBlock x:Name="TxtTitleTypeHint" Style="{StaticResource Caption}" Margin="0,4,0,0"
+                     TextWrapping="Wrap"
+                     Text="Тип видового экрана — какое семейство заголовка и есть ли линия."/>
+
+          <StackPanel x:Name="PanelTitleText" Margin="0,8,0,0">
+            <TextBlock Style="{StaticResource Caption}" Text="Текст заголовка"/>
+            <WrapPanel Margin="0,3,0,0">
+              <RadioButton x:Name="ChipTitleSystems" Style="{StaticResource RadioButton.Chip}"
+                           GroupName="TitleText" Content="Системы из имени вида" MinWidth="0" Margin="0,0,6,6"
+                           ToolTip="В «Заголовок на листе» пишется «Система П1» или «Системы П1-П3» по имени вида"/>
+              <RadioButton x:Name="ChipTitleKeep" Style="{StaticResource RadioButton.Chip}"
+                           GroupName="TitleText" Content="Не менять" MinWidth="0" Margin="0,0,6,6"
+                           ToolTip="«Заголовок на листе» остаётся как есть; пустой — Revit покажет имя вида"/>
+            </WrapPanel>
+          </StackPanel>
+
+          <Grid Margin="0,4,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="14"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+              <TextBlock Style="{StaticResource Caption}" Text="Где относительно вида"/>
+              <WrapPanel Margin="0,3,0,0">
+                <RadioButton x:Name="ChipTitleAbove" Style="{StaticResource RadioButton.Chip}"
+                             GroupName="TitleV" Content="Над" MinWidth="0" Margin="0,0,6,6"
+                             ToolTip="Заголовок над рамкой вида"/>
+                <RadioButton x:Name="ChipTitleBelow" Style="{StaticResource RadioButton.Chip}"
+                             GroupName="TitleV" Content="Под" MinWidth="0" Margin="0,0,6,6"
+                             ToolTip="Заголовок под рамкой вида"/>
+              </WrapPanel>
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+              <TextBlock Style="{StaticResource Caption}" Text="Выравнивание"/>
+              <WrapPanel Margin="0,3,0,0">
+                <RadioButton x:Name="ChipTitleLeft" Style="{StaticResource RadioButton.Chip}"
+                             GroupName="TitleH" Content="Слева" MinWidth="0" Margin="0,0,6,6"
+                             ToolTip="Начало заголовка по левому краю вида"/>
+                <RadioButton x:Name="ChipTitleCenter" Style="{StaticResource RadioButton.Chip}"
+                             GroupName="TitleH" Content="По центру" MinWidth="0" Margin="0,0,6,6"
+                             ToolTip="Заголовок по центру вида"/>
+                <RadioButton x:Name="ChipTitleRight" Style="{StaticResource RadioButton.Chip}"
+                             GroupName="TitleH" Content="Справа" MinWidth="0" Margin="0,0,6,6"
+                             ToolTip="Конец заголовка по правому краю вида"/>
+              </WrapPanel>
+            </StackPanel>
+          </Grid>
+
+          <Grid Margin="0,4,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="14"/>
+              <ColumnDefinition Width="110"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+              <TextBlock Style="{StaticResource Caption}" Text="Длина линии"/>
+              <WrapPanel Margin="0,3,0,0">
+                <RadioButton x:Name="ChipLineText" Style="{StaticResource RadioButton.Chip}"
+                             GroupName="TitleLine" Content="По тексту" MinWidth="0" Margin="0,0,6,6"
+                             ToolTip="Линия под заголовком по длине текста"/>
+                <RadioButton x:Name="ChipLineView" Style="{StaticResource RadioButton.Chip}"
+                             GroupName="TitleLine" Content="По ширине вида" MinWidth="0" Margin="0,0,6,6"
+                             ToolTip="Линия на всю ширину рамки вида"/>
+                <RadioButton x:Name="ChipLineKeep" Style="{StaticResource RadioButton.Chip}"
+                             GroupName="TitleLine" Content="Не менять" MinWidth="0" Margin="0,0,6,6"
+                             ToolTip="Длина линии как у нового видового экрана"/>
+              </WrapPanel>
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+              <TextBlock Style="{StaticResource Caption}" Text="Отступ от вида, мм"/>
+              <TextBox x:Name="TxtTitleGap" Style="{StaticResource TextBox.Field}" Margin="0,3,0,0"
+                       Tag="например 3"/>
+            </StackPanel>
+          </Grid>
+
+          <CheckBox x:Name="ChkTitleRows" Style="{StaticResource PP.CheckBox}" Margin="0,4,0,0"
+                    Content="Заголовки видов в ряду — на одной высоте"
+                    ToolTip="Виды в ряду выравниваются по краю со стороны заголовка, и заголовки встают в линию"/>
+
           <ToggleButton x:Name="TglMargins" Style="{StaticResource ToggleButton.Expander}"
                         Margin="0,10,0,0" Content="Поля рамки и подбор формата"/>
           <StackPanel x:Name="PanelMargins" Margin="0,4,0,0"
@@ -185,19 +277,21 @@
 
           </StackPanel>
 
-          <Border Style="{StaticResource Card.Result}" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock x:Name="TxtResultLabel" Style="{StaticResource FieldLabel}"
-                         Text="БУДЕТ СОЗДАНО"/>
-              <TextBlock x:Name="TxtResult" Style="{StaticResource Body.Result}"
-                         Margin="0,4,0,0" TextWrapping="Wrap"/>
-              <TextBlock x:Name="TxtResultDetail" Style="{StaticResource Caption}"
-                         Margin="0,6,0,0" TextWrapping="Wrap"/>
-            </StackPanel>
-          </Border>
 
         </StackPanel>
-      </ScrollViewer>
+        </ScrollViewer>
+
+        <Border Grid.Row="1" Style="{StaticResource Card.Result}" Margin="0,10,0,0">
+          <StackPanel>
+            <TextBlock x:Name="TxtResultLabel" Style="{StaticResource FieldLabel}"
+                       Text="БУДЕТ СОЗДАНО"/>
+            <TextBlock x:Name="TxtResult" Style="{StaticResource Body.Result}"
+                       Margin="0,4,0,0" TextWrapping="Wrap"/>
+            <TextBlock x:Name="TxtResultDetail" Style="{StaticResource Caption}"
+                       Margin="0,6,0,0" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Border>
+      </Grid>
     </Grid>
 
     <Border Grid.Row="2" Style="{StaticResource Rule}" Margin="0,12,0,0"/>

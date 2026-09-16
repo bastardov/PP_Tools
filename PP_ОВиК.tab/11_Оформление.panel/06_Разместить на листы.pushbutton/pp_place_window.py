@@ -44,6 +44,27 @@ ORIENT_CHIPS = (
      u"Для каждого формата сначала альбомная, потом книжная — берётся меньший подходящий лист."),
 )
 
+# Заголовки видов: группа чипсов -> [(значение, имя чипса)]. Значения совпадают
+# с TITLE_* в script.py.
+TITLE_CHIPS = {
+    u"text": ((u"systems", "ChipTitleSystems"), (u"keep", "ChipTitleKeep")),
+    u"valign": ((u"above", "ChipTitleAbove"), (u"below", "ChipTitleBelow")),
+    u"halign": ((u"left", "ChipTitleLeft"), (u"center", "ChipTitleCenter"),
+                (u"right", "ChipTitleRight")),
+    u"line": ((u"text", "ChipLineText"), (u"view", "ChipLineView"),
+              (u"keep", "ChipLineKeep")),
+}
+
+TITLE_FALLBACK = {u"text": u"systems", u"valign": u"above",
+                  u"halign": u"center", u"line": u"text"}
+
+TITLE_WORDS = {
+    u"above": u"над видом", u"below": u"под видом",
+    u"left": u"слева", u"center": u"по центру", u"right": u"справа",
+}
+
+SAMPLE_TYPE = u"Как на листе-образце"
+
 _NUMBER = re.compile(u"^\\s*(\\d+)\\s*$")
 
 MODE_TEXT = {
@@ -161,6 +182,7 @@ class PlaceWindow(object):
         self.sheets = list(sheets)
         self.taken = set(taken_numbers or [])
         self.name_for = name_for
+        self.title_preview = defaults.get(u"title_preview") or (lambda view: u"")
         self.prefixes = list(prefixes or [])
         self.current = dict(defaults.get(u"current") or {})
         self.result = None
@@ -194,6 +216,8 @@ class PlaceWindow(object):
         self._fill_samples(defaults.get(u"sample_id"))
         self._fill_sections()
         self._fill_prefixes(defaults.get(u"prefix"))
+        self._fill_title_types(defaults.get(u"viewport_types") or [],
+                               (defaults.get(u"title") or {}).get(u"type_id"))
 
         margins = defaults.get(u"margins") or (20.0, 5.0, 5.0, 60.0)
         find("TxtLeft").Text = self._fmt(margins[0])
@@ -209,6 +233,7 @@ class PlaceWindow(object):
         self._apply_sample()
         self._reset_start()
         self._set_orientation(defaults.get(u"orientation") or ORIENT_LANDSCAPE)
+        self._set_title(defaults.get(u"title") or {})
 
         mode = defaults.get(u"mode") or MODE_PLANS
         if not self.items.get(mode):
@@ -299,6 +324,46 @@ class PlaceWindow(object):
             combo.SelectedIndex = 0
         else:
             combo.SelectedIndex = 1 if self.prefixes else 0
+
+    def _fill_title_types(self, types, selected_id):
+        u"""Типы видового экрана: (id, имя). Первая строка — как у образца."""
+        combo = self.window.FindName("CmbTitleType")
+        self.title_types = list(types)
+
+        combo.Items.Add(SAMPLE_TYPE)
+        index = 0
+
+        for position, (type_id, name) in enumerate(self.title_types):
+            combo.Items.Add(name)
+
+            if selected_id and type_id == selected_id:
+                index = position + 1
+
+        combo.SelectedIndex = index
+
+        if not self.title_types:
+            self.window.FindName("TxtTitleTypeHint").Text = (
+                u"В проекте ещё нет видовых экранов — тип возьмётся с листа-образца.")
+
+    def _set_title(self, title):
+        find = self.window.FindName
+
+        for group, chips in TITLE_CHIPS.items():
+            value = title.get(group) or TITLE_FALLBACK[group]
+            names = dict(chips)
+            find(names.get(value) or names[TITLE_FALLBACK[group]]).IsChecked = True
+
+        find("TxtTitleGap").Text = self._fmt(title.get(u"gap", 3.0))
+        find("ChkTitleRows").IsChecked = bool(title.get(u"rows", True))
+
+    def _chip_value(self, group):
+        find = self.window.FindName
+
+        for value, name in TITLE_CHIPS[group]:
+            if find(name).IsChecked:
+                return value
+
+        return TITLE_FALLBACK[group]
 
     def _fill_templates(self):
         u"""Фильтр по шаблону вида для текущего режима. Нет шаблонов — прячем."""
@@ -424,6 +489,15 @@ class PlaceWindow(object):
 
         for _value, chip_name, _hint in ORIENT_CHIPS:
             find(chip_name).Checked += on_orientation
+
+        for chips in TITLE_CHIPS.values():
+            for _value, chip_name in chips:
+                find(chip_name).Checked += on_any
+
+        find("CmbTitleType").SelectionChanged += on_any
+        find("TxtTitleGap").TextChanged += on_any
+        find("ChkTitleRows").Checked += on_any
+        find("ChkTitleRows").Unchecked += on_any
         find("BtnRun").Click += on_run
         find("BtnCancel").Click += on_cancel
 
@@ -447,6 +521,8 @@ class PlaceWindow(object):
             else Visibility.Collapsed
         find("PanelPrefix").Visibility = views_only
         find("PanelGap").Visibility = views_only
+        find("PanelTitleText").Visibility = views_only
+        find("ChkTitleRows").Visibility = views_only
 
         self._fill_templates()
         self._apply_template_filter()
@@ -585,9 +661,30 @@ class PlaceWindow(object):
         except Exception:
             return None, u"Зазор между видами — неотрицательное число в мм."
 
+        try:
+            title_gap = self._read_number("TxtTitleGap")
+        except Exception:
+            return None, u"Отступ заголовка от вида — неотрицательное число в мм."
+
+        type_index = find("CmbTitleType").SelectedIndex
+        type_id = None
+        if 1 <= type_index <= len(self.title_types):
+            type_id = self.title_types[type_index - 1][0]
+
+        title = {
+            u"type_id": type_id,
+            u"text": self._chip_value(u"text"),
+            u"halign": self._chip_value(u"halign"),
+            u"valign": self._chip_value(u"valign"),
+            u"line": self._chip_value(u"line"),
+            u"gap": title_gap,
+            u"rows": bool(find("ChkTitleRows").IsChecked),
+        }
+
         suffix = unicode(find("TxtSuffix").Text or u"").strip()
 
         return {
+            u"title": title,
             u"mode": self.mode,
             u"views": [item[u"view"] for _name, item in checked],
             u"labels": [name for name, _item in checked],
@@ -661,6 +758,10 @@ class PlaceWindow(object):
 
             if name:
                 lines.append(u"Первый лист: «{0}».".format(name))
+
+            title = options[u"title"]
+            lines.append(u"Заголовок {0}, {1}.".format(
+                TITLE_WORDS[title[u"valign"]], TITLE_WORDS[title[u"halign"]]))
         else:
             number = allocate_numbers(
                 options[u"start"], options[u"suffix"], self.taken, 1)[0]
@@ -670,6 +771,24 @@ class PlaceWindow(object):
 
             if name:
                 lines.append(u"Имя: «{0}».".format(name))
+
+            title = options[u"title"]
+            title_text = u""
+
+            if title[u"text"] == u"systems":
+                try:
+                    title_text = self.title_preview(options[u"views"][0]) or u""
+                except Exception:
+                    title_text = u""
+
+            where = u"{0}, {1}".format(TITLE_WORDS[title[u"valign"]],
+                                        TITLE_WORDS[title[u"halign"]])
+
+            if title_text:
+                lines.append(u"Заголовок первого вида: «{0}», {1}.".format(
+                    title_text, where))
+            else:
+                lines.append(u"Заголовки {0}.".format(where))
 
             lines.append(u"Если все виды не поместятся даже на самый большой "
                          u"формат, остаток уйдёт на следующие номера — "

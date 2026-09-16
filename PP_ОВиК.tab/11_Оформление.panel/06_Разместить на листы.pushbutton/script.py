@@ -3,7 +3,7 @@
 try: import pp_usage; pp_usage.log(__file__)
 except Exception: pass
 
-u"""Разместить на листы — два режима.
+u"""Разместить на листы — два режима, на выходе готовый лист.
 
 «Планы»: каждый отмеченный план — на свой новый лист, по центру.
 «Виды»: 3D-виды, разрезы, фасады, чертёжные виды — все на один лист рядами;
@@ -24,6 +24,10 @@ u"""Разместить на листы — два режима.
    BoundingBox. Первый формат, где всё влезло в рабочую область (рамка минус
    поля), — итоговый.
 4. Виды сдвигаются на свои места MoveElement-ом на разность прямоугольников.
+
+Заголовки видов оформляются ДО измерения и раскладки (иначе раскладка
+посчитает габарит со старым положением подписи): тип видового экрана, текст
+«Заголовок на листе», длина линии, положение относительно рамки вида.
 """
 
 import os
@@ -37,7 +41,7 @@ clr.AddReference("RevitAPIUI")
 from System.Collections.Generic import List
 
 from Autodesk.Revit.DB import (
-    BuiltInCategory, CopyPasteOptions, ElementId, ElementTransformUtils,
+    BuiltInCategory, BuiltInParameter, CopyPasteOptions, ElementId, ElementTransformUtils,
     FilteredElementCollector, StorageType, Transaction, Transform, View,
     ViewSheet, ViewType, Viewport, XYZ
 )
@@ -56,6 +60,7 @@ import pp_place_layout
 import pp_place_window
 
 from pp_settings import load_settings, save_settings
+from pp_wall_merge import element_name
 
 
 uidoc = __revit__.ActiveUIDocument
@@ -110,6 +115,28 @@ ORIENT_ANY = u"any"
 OVERFLOW_FMT = 0
 
 NO_CROP = u"нет подрезки"
+
+# Заголовки видов — значения из окна (см. pp_place_window.TITLE_*)
+TITLE_TEXT_KEEP = u"keep"         # «Заголовок на листе» не трогать
+TITLE_TEXT_SYSTEMS = u"systems"   # «Система П1» / «Системы П1-П3, В1»
+TITLE_LEFT = u"left"
+TITLE_CENTER = u"center"
+TITLE_RIGHT = u"right"
+TITLE_ABOVE = u"above"
+TITLE_BELOW = u"below"
+LINE_KEEP = u"keep"
+LINE_TEXT = u"text"
+LINE_VIEW = u"view"
+
+TITLE_DEFAULTS = {
+    u"type_id": None,             # None — как на листе-образце
+    u"text": TITLE_TEXT_SYSTEMS,
+    u"halign": TITLE_CENTER,
+    u"valign": TITLE_ABOVE,
+    u"gap": 3.0,
+    u"line": LINE_TEXT,
+    u"rows": True,
+}
 
 
 class Stop(Exception):
@@ -254,6 +281,7 @@ def load_defaults(lists, sheets):
         u"mode": stored.get(u"mode", MODE_PLANS),
         u"sample_id": None,
         u"current": {},
+        u"title": stored_title(stored),
     }
 
     active = doc.ActiveView
@@ -279,6 +307,17 @@ def load_defaults(lists, sheets):
     return settings, defaults
 
 
+def stored_title(stored):
+    title = dict(TITLE_DEFAULTS)
+    saved = stored.get(u"title") or {}
+
+    for key in TITLE_DEFAULTS:
+        if key in saved:
+            title[key] = saved[key]
+
+    return title
+
+
 def stored_orientation(stored):
     u"""Ориентация из настроек. Старые запуски хранили галочку portrait:
     стояла — «подобрать», снята — «альбомная». По умолчанию — альбомная."""
@@ -298,6 +337,7 @@ def store_defaults(settings, options):
         u"margins": list(options[u"margins"]),
         u"suffix": options[u"suffix"],
         u"orientation": options[u"orientation"],
+        u"title": dict(options[u"title"]),
         u"gap": options[u"gap"],
         u"prefix": options[u"prefix"],
         u"mode": options[u"mode"],
@@ -430,27 +470,222 @@ def work_area(title_block, sheet, margins):
 
 # ── Видовой экран: габарит с подписью и перенос ────────────────────────────────
 
-def viewport_rect(viewport):
-    u"""Прямоугольник вида на листе в мм — вместе с подписью.
+def collect_viewport_types():
+    u"""[(id, имя), ...] типов видового экрана. API отдаёт их только от
+    существующего экрана (GetValidTypes), поэтому берём любой в проекте."""
+    viewport = FilteredElementCollector(doc).OfClass(Viewport).FirstElement()
 
-    GetBoxOutline() подпись не включает; GetLabelOutline() появился в
-    Revit 2022. Если подписи нет (скрыта типом экрана), её прямоугольник
-    вырожден — такой не учитываем.
-    """
-    x0, y0, x1, y1 = outline_mm(viewport.GetBoxOutline())
+    if viewport is None:
+        return []
+
+    result = []
 
     try:
-        lx0, ly0, lx1, ly1 = outline_mm(viewport.GetLabelOutline())
-
-        if lx1 - lx0 > 0.1 and ly1 - ly0 > 0.1:
-            x0 = min(x0, lx0)
-            y0 = min(y0, ly0)
-            x1 = max(x1, lx1)
-            y1 = max(y1, ly1)
+        type_ids = viewport.GetValidTypes()
     except Exception:
-        pass
+        type_ids = [viewport.GetTypeId()]
+
+    for type_id in type_ids:
+        element = doc.GetElement(type_id)
+        if element is None:
+            continue
+
+        name = element_name(element)
+        if name:
+            result.append((type_id.IntegerValue, unicode(name)))
+
+    result.sort(key=lambda item: pp_sheet_picker.natural_key(item[1]))
+    return result
+
+
+def box_rect(viewport):
+    return outline_mm(viewport.GetBoxOutline())
+
+
+def label_rect(viewport):
+    u"""Прямоугольник заголовка в мм или None — если заголовок скрыт типом
+    экрана (тогда GetLabelOutline вырожден). GetLabelOutline — с Revit 2022."""
+    try:
+        x0, y0, x1, y1 = outline_mm(viewport.GetLabelOutline())
+    except Exception:
+        return None
+
+    if x1 - x0 > 0.1 and y1 - y0 > 0.1:
+        return x0, y0, x1, y1
+
+    return None
+
+
+def viewport_rect(viewport):
+    u"""Прямоугольник вида на листе в мм — вместе с заголовком.
+
+    GetBoxOutline() заголовок НЕ включает, поэтому объединяем с
+    GetLabelOutline().
+    """
+    x0, y0, x1, y1 = box_rect(viewport)
+    label = label_rect(viewport)
+
+    if label is not None:
+        x0 = min(x0, label[0])
+        y0 = min(y0, label[1])
+        x1 = max(x1, label[2])
+        y1 = max(y1, label[3])
 
     return x0, y0, x1, y1
+
+
+def layout_item(run, viewport):
+    u"""(ширина, высота, below) для pp_place_layout.
+
+    При «заголовки по рядам» линия выравнивания в ряду — край рамки вида со
+    стороны заголовка: низ, если заголовок под видом, верх — если над. Тогда
+    у видов ряда заголовки встают на одну высоту. Иначе — середина.
+    """
+    rect = viewport_rect(viewport)
+    w = rect[2] - rect[0]
+    h = rect[3] - rect[1]
+    title = run.options[u"title"]
+
+    if not title[u"rows"] or label_rect(viewport) is None:
+        return rect, (w, h)
+
+    box = box_rect(viewport)
+    anchor = box[1] if title[u"valign"] == TITLE_BELOW else box[3]
+    return rect, (w, h, anchor - rect[1])
+
+
+# ── Заголовки видов ────────────────────────────────────────────────────────────
+
+def systems_title(view):
+    u"""«Система П1» / «Системы П1-П3, В1» по имени вида или None."""
+    systems = pp_sheet_naming.extract_systems(view.Name)
+
+    if not systems:
+        return None
+
+    text = pp_sheet_naming.compress_system_ranges(
+        systems, pp_sheet_naming.supply_first_key)
+    word = u"Система" if len(systems) == 1 else u"Системы"
+
+    return u"{0} {1}".format(word, text)
+
+
+def set_title_text(view, text):
+    parameter = view.get_Parameter(BuiltInParameter.VIEW_DESCRIPTION)
+
+    if parameter is None or parameter.IsReadOnly:
+        return False
+
+    try:
+        parameter.Set(text)
+        return True
+    except Exception:
+        return False
+
+
+def style_titles(run, viewports, views):
+    u"""Оформить заголовки всех видовых экранов листа.
+
+    Всё пакетами — на лист уходит 4–5 регенераций, а не по несколько на вид.
+    Точку отсчёта LabelOffset документация описывает скупо, поэтому положение
+    не вычисляется «в лоб», а подгоняется: ставим, читаем фактический
+    GetLabelOutline, сдвигаем на разницу; два прохода.
+    """
+    title = run.options[u"title"]
+    gap = float(title[u"gap"])
+
+    # 1. Текст
+    if title[u"text"] == TITLE_TEXT_SYSTEMS and \
+            run.options[u"mode"] == MODE_VIEWS:
+        for view in views:
+            text = systems_title(view)
+
+            if text:
+                set_title_text(view, text)
+            elif view.Id.IntegerValue not in run.untitled:
+                run.untitled.add(view.Id.IntegerValue)
+                run.warnings.append(
+                    u"«{0}»: в имени вида нет обозначения системы — "
+                    u"«Заголовок на листе» оставлен как был".format(view.Name))
+
+    doc.Regenerate()
+
+    titled = [vp for vp in viewports if label_rect(vp) is not None]
+
+    if not titled:
+        return
+
+    # 2. Длина линии
+    if title[u"line"] != LINE_KEEP:
+        if title[u"line"] == LINE_TEXT:
+            # Короткая линия — габарит заголовка становится шириной текста
+            for viewport in titled:
+                try:
+                    viewport.LabelLineLength = 1.0 / MM
+                except Exception:
+                    pass
+
+            doc.Regenerate()
+
+        for viewport in titled:
+            try:
+                if title[u"line"] == LINE_VIEW:
+                    box = box_rect(viewport)
+                    length = box[2] - box[0]
+                else:
+                    label = label_rect(viewport)
+                    length = (label[2] - label[0]) if label else 0.0
+
+                if length > 0.5:
+                    viewport.LabelLineLength = length / MM
+            except Exception:
+                pass
+
+        doc.Regenerate()
+
+    # 3. Положение — подгонка по факту
+    for _attempt in range(2):
+        moved = False
+
+        for viewport in titled:
+            label = label_rect(viewport)
+            if label is None:
+                continue
+
+            box = box_rect(viewport)
+            lw = label[2] - label[0]
+            lh = label[3] - label[1]
+
+            if title[u"halign"] == TITLE_LEFT:
+                tx0 = box[0]
+            elif title[u"halign"] == TITLE_RIGHT:
+                tx0 = box[2] - lw
+            else:
+                tx0 = (box[0] + box[2] - lw) / 2.0
+
+            if title[u"valign"] == TITLE_BELOW:
+                ty0 = box[1] - gap - lh
+            else:
+                ty0 = box[3] + gap
+
+            dx = tx0 - label[0]
+            dy = ty0 - label[1]
+
+            if abs(dx) < 0.05 and abs(dy) < 0.05:
+                continue
+
+            try:
+                offset = viewport.LabelOffset
+                viewport.LabelOffset = XYZ(offset.X + dx / MM,
+                                           offset.Y + dy / MM, 0.0)
+                moved = True
+            except Exception:
+                pass
+
+        if not moved:
+            break
+
+        doc.Regenerate()
 
 
 def move_viewport(viewport, rect, target_x0, target_y0):
@@ -565,16 +800,28 @@ class Run(object):
         self.section_param = section_param
         self.taken = set(taken)
         self.next_value = options[u"start"]
-        self.viewport_type = sample_viewport_type(options[u"sample"])
+        self.viewport_type = self._viewport_type(options)
         self.candidates = format_candidates(options[u"orientation"])
         self.created = []    # [(лист, формат, число видов)]
         self.warnings = []
+        self.untitled = set()  # id видов, где заголовок из систем не собрался
         self.done = set()      # id видов, легших на листы
         self.skipped = set()   # id видов, которые Revit не даёт ставить на лист
 
         self.source_blocks = title_blocks_on(options[u"sample"])
         if not self.source_blocks:
             raise Stop(u"На листе-образце нет основной надписи.")
+
+    @staticmethod
+    def _viewport_type(options):
+        type_id = options[u"title"].get(u"type_id")
+
+        if type_id:
+            element = doc.GetElement(ElementId(int(type_id)))
+            if element is not None:
+                return element.Id
+
+        return sample_viewport_type(options[u"sample"])
 
     def next_number(self):
         u"""Следующий свободный номер «N<суффикс>» — занятые пропускаются."""
@@ -624,7 +871,7 @@ def place_plan(run, view):
                    u"или не подходит по типу).".format(view.Name))
 
     viewport = add_viewport(sheet, view, run.viewport_type)
-    doc.Regenerate()
+    style_titles(run, [viewport], [view])
 
     rect = viewport_rect(viewport)
     need_w = rect[2] - rect[0]
@@ -688,10 +935,14 @@ def place_views_sheet(run, views):
     for view in views:
         viewports.append(add_viewport(sheet, view, run.viewport_type))
 
-    doc.Regenerate()
+    style_titles(run, viewports, views)
 
-    rects = [viewport_rect(viewport) for viewport in viewports]
-    sizes = [(r[2] - r[0], r[3] - r[1]) for r in rects]
+    rects = []
+    sizes = []
+    for viewport in viewports:
+        rect, item = layout_item(run, viewport)
+        rects.append(rect)
+        sizes.append(item)
 
     chosen = None
 
@@ -715,7 +966,7 @@ def place_views_sheet(run, views):
 
         if placed == 0:
             # Первый вид больше А0 — пробуем удлинённые, иначе кладём как есть
-            w, h = sizes[0]
+            w, h = sizes[0][0], sizes[0][1]
             candidate = None
 
             for item in run.candidates:
@@ -816,6 +1067,9 @@ def run_tool():
     taken = set(row[u"number"] for row in sheets)
 
     settings, defaults = load_defaults(lists, sheets)
+
+    defaults[u"viewport_types"] = collect_viewport_types()
+    defaults[u"title_preview"] = systems_title
 
     options = pp_place_window.ask(
         _HERE, lists, sheets, taken, name_for,
