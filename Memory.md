@@ -453,6 +453,8 @@ pyRevit видит `lib/`).
   чипсами в одном окне. Файлы: `script.py` (Revit), `pp_place_window.py`
   (окно), `ui.xaml`, `pp_place_layout.py` (чистая геометрия раскладки, без
   Revit — проверяется обычным python). Имена листов — `lib/pp_sheet_naming.py`.
+  - Иконка: синий чертёжный лист с рамками видов и зелёной стрелкой размещения;
+    `icon.png`, 96×96, прозрачный фон.
   - **«Планы»**: FloorPlan/CeilingPlan/AreaPlan/EngineeringPlan — один план =
     один лист, по центру (так принято в проектах).
   - **«Виды»**: ThreeD/Section/Elevation/Detail/DraftingView — все отмеченные
