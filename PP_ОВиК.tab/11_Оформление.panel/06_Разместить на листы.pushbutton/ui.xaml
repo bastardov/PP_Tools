@@ -41,13 +41,21 @@
       <Grid Grid.Column="0" Margin="0,0,14,0">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
           <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}"
                    Text="КАКИЕ ПЛАНЫ РАЗМЕСТИТЬ"/>
 
-        <ContentControl x:Name="ListHost" Grid.Row="1" Margin="0,6,0,0"
+        <StackPanel x:Name="PanelTemplate" Grid.Row="1" Margin="0,6,0,0">
+          <ComboBox x:Name="CmbTemplate" Style="{StaticResource PP.ComboBox}"
+                    ToolTip="Показывать в списке только планы с выбранным шаблоном вида"/>
+          <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                     Text="Фильтр по шаблону вида. Отметки не сбрасываются: можно набрать планы из нескольких шаблонов."/>
+        </StackPanel>
+
+        <ContentControl x:Name="ListHost" Grid.Row="2" Margin="0,8,0,0"
                         HorizontalContentAlignment="Stretch"
                         VerticalContentAlignment="Stretch"/>
       </Grid>

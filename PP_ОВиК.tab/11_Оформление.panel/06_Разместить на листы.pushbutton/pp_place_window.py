@@ -11,7 +11,7 @@ import re
 import pp_wpf  # первым: добавляет clr-ссылки на сборки WPF
 import pp_check_list
 
-from System.Windows import Application, Thickness
+from System.Windows import Application, Thickness, Visibility
 from System.Windows.Controls import RadioButton
 
 
@@ -98,7 +98,8 @@ class PlaceWindow(object):
     def __init__(self, folder, plans, sheets, taken_numbers, name_for,
                  defaults):
         u"""
-        plans         — [(подпись, вид), ...]
+        plans         — [(подпись, {view, template}), ...]; template — имя
+                        шаблона вида или пусто
         sheets        — [{sheet, number, name, section}, ...] (pp_sheet_picker)
         taken_numbers — множество занятых номеров листов
         name_for      — fn(вид) -> имя листа для предпросмотра
@@ -128,6 +129,9 @@ class PlaceWindow(object):
 
         self.current_label = defaults.get(u"current")
 
+        # Ключи фильтра по позициям ComboBox: None — все шаблоны
+        self.template_keys = [None]
+        self._fill_templates()
         self._fill_samples(defaults.get(u"sample_id"))
         self._fill_sections()
 
@@ -165,6 +169,43 @@ class PlaceWindow(object):
             return unicode(int(round(value)))
 
         return unicode(value)
+
+    def _fill_templates(self):
+        u"""Фильтр по шаблону вида. Нет шаблонов ни у одного плана — прячем."""
+        find = self.window.FindName
+        combo = find("CmbTemplate")
+
+        counts = {}
+        for _label, item in self.plans:
+            template = item.get(u"template") or u""
+            counts[template] = counts.get(template, 0) + 1
+
+        if not any(counts.keys()):
+            find("PanelTemplate").Visibility = Visibility.Collapsed
+            return
+
+        combo.Items.Add(u"Все шаблоны ({0})".format(len(self.plans)))
+
+        names = sorted((name for name in counts if name), key=lambda n: n.lower())
+        if u"" in counts:
+            names.append(u"")
+
+        for name in names:
+            combo.Items.Add(u"{0} ({1})".format(
+                name or u"(без шаблона)", counts[name]))
+            self.template_keys.append(name)
+
+        combo.SelectedIndex = 0
+
+    def _apply_template_filter(self):
+        index = self.window.FindName("CmbTemplate").SelectedIndex
+
+        if index <= 0 or index >= len(self.template_keys):
+            self.list.set_filter(None)
+        else:
+            key = self.template_keys[index]
+            self.list.set_filter(
+                lambda _name, item: (item.get(u"template") or u"") == key)
 
     def _fill_samples(self, sample_id):
         combo = self.window.FindName("CmbSample")
@@ -229,6 +270,11 @@ class PlaceWindow(object):
             self._refresh()
 
         @guard
+        def on_template(sender, args):
+            self._apply_template_filter()
+            self._refresh()
+
+        @guard
         def on_section(sender, args):
             self._sync_chips()
             self._refresh()
@@ -258,6 +304,7 @@ class PlaceWindow(object):
             self.window.Close()
 
         find("CmbSample").SelectionChanged += on_sample
+        find("CmbTemplate").SelectionChanged += on_template
         find("TxtSection").TextChanged += on_section
         find("TxtStart").TextChanged += on_start
         find("TxtSuffix").TextChanged += on_suffix
@@ -306,7 +353,7 @@ class PlaceWindow(object):
 
     def _on_current(self, sender, args):
         if self.current_label:
-            names = set(name for name, _view in self.list.get_checked())
+            names = set(name for name, _item in self.list.get_checked())
             names.add(self.current_label)
             self.list.set_checked(names)
             self._refresh()
@@ -352,8 +399,8 @@ class PlaceWindow(object):
         suffix = unicode(find("TxtSuffix").Text or u"").strip()
 
         return {
-            u"views": [view for _name, view in checked],
-            u"labels": [name for name, _view in checked],
+            u"views": [item[u"view"] for _name, item in checked],
+            u"labels": [name for name, _item in checked],
             u"sample": sample[u"sheet"],
             u"sample_label": u"{0} — {1}".format(
                 sample[u"number"], sample[u"name"]).strip(u" —"),

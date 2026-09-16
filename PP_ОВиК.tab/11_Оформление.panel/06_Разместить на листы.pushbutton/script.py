@@ -111,8 +111,19 @@ def views_on_sheets():
     return ids
 
 
+def template_name(view):
+    try:
+        template_id = view.ViewTemplateId
+        if template_id is None or template_id == ElementId.InvalidElementId:
+            return u""
+        template = doc.GetElement(template_id)
+        return unicode(template.Name) if template is not None else u""
+    except Exception:
+        return u""
+
+
 def collect_plans():
-    u"""[(подпись, вид), ...] — планы, ещё не лежащие на листах."""
+    u"""[(подпись, {view, template}), ...] — планы, ещё не лежащие на листах."""
     placed = views_on_sheets()
     rows = []
 
@@ -144,7 +155,7 @@ def collect_plans():
         label = name
         if labels[name] > 1:
             label = u"{0}   ·   id {1}".format(name, view.Id.IntegerValue)
-        items.append((label, view))
+        items.append((label, {u"view": view, u"template": template_name(view)}))
 
     return items
 
@@ -178,8 +189,8 @@ def load_defaults(plans, sheets):
     if isinstance(active, ViewSheet):
         defaults[u"sample_id"] = active.Id
     else:
-        for label, view in plans:
-            if view.Id == active.Id:
+        for label, item in plans:
+            if item[u"view"].Id == active.Id:
                 defaults[u"current"] = label
                 defaults[u"preselect"] = [label]
                 break
