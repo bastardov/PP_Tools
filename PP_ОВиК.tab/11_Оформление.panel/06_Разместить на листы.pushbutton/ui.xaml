@@ -1,0 +1,170 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Разместить на листы"
+        Width="1000"
+        Height="780"
+        MinWidth="880"
+        MinHeight="600"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Canvas}">
+
+  <!-- Неявные стили держим в области окна, чтобы не задеть интерфейс Revit -->
+  <Window.Resources>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource PP.ScrollBar}"/>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource PP.ToolTip}"/>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>   <!-- заголовок -->
+      <RowDefinition Height="*" MinHeight="260"/>      <!-- две колонки -->
+      <RowDefinition Height="Auto"/>   <!-- разделитель -->
+      <RowDefinition Height="Auto"/>   <!-- подвал -->
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0">
+      <TextBlock Style="{StaticResource H1}" Text="Разместить на листы"/>
+      <TextBlock Style="{StaticResource Subtitle}" Margin="0,2,0,0" TextWrapping="Wrap"
+                 Text="Каждый отмеченный план получает свой лист: рамка копируется с листа-образца, формат подбирается под план, план ставится по центру."/>
+    </StackPanel>
+
+    <Grid Grid.Row="1" Margin="0,14,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" MinWidth="360"/>
+        <ColumnDefinition Width="420"/>
+      </Grid.ColumnDefinitions>
+
+      <!-- ===== Левая колонка: какие планы ===== -->
+      <Grid Grid.Column="0" Margin="0,0,14,0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}"
+                   Text="КАКИЕ ПЛАНЫ РАЗМЕСТИТЬ"/>
+
+        <ContentControl x:Name="ListHost" Grid.Row="1" Margin="0,6,0,0"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch"/>
+      </Grid>
+
+      <!-- ===== Правая колонка: как оформить ===== -->
+      <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled">
+        <StackPanel>
+
+          <TextBlock Style="{StaticResource FieldLabel}" Text="ЛИСТ-ОБРАЗЕЦ"/>
+          <ComboBox x:Name="CmbSample" Style="{StaticResource PP.ComboBox}"
+                    Margin="0,6,0,0"
+                    ToolTip="С этого листа копируется основная надпись со всеми её настройками"/>
+          <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                     Text="С него копируется основная надпись со всеми настройками. Виды, текст и легенды образца не копируются."/>
+
+          <TextBlock Style="{StaticResource FieldLabel}" Margin="0,14,0,0"
+                     Text="РАЗДЕЛ ПРОЕКТА"/>
+          <TextBox x:Name="TxtSection" Style="{StaticResource TextBox.Field}"
+                   Margin="0,6,0,0" Tag="Раздел новых листов, например ОВ"/>
+          <WrapPanel x:Name="PanelSections" Margin="0,6,0,0"/>
+          <TextBlock x:Name="TxtSectionHint" Style="{StaticResource Caption}" Margin="0,2,0,0"
+                     TextWrapping="Wrap"
+                     Text="Разделы, которые уже есть в проекте — щёлкните по чипсу, и он подставится в поле выше."/>
+
+          <TextBlock Style="{StaticResource FieldLabel}" Margin="0,14,0,0"
+                     Text="НУМЕРАЦИЯ"/>
+          <Grid Margin="0,6,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="10"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+              <TextBox x:Name="TxtStart" Style="{StaticResource TextBox.Field}"
+                       Tag="Начать с номера, например 12"/>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
+                         Text="Первый номер. Занятые пропускаются."/>
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+              <TextBox x:Name="TxtSuffix" Style="{StaticResource TextBox.Field}"
+                       Tag="Суффикс номера, например ОВ"/>
+              <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
+                         Text="Приписывается к номеру: 12ОВ, 13ОВ…"/>
+            </StackPanel>
+          </Grid>
+
+          <ToggleButton x:Name="TglMargins" Style="{StaticResource ToggleButton.Expander}"
+                        Margin="0,10,0,0" Content="Поля рамки и подбор формата"/>
+          <StackPanel x:Name="PanelMargins" Margin="0,4,0,0"
+                      Visibility="{Binding IsChecked, ElementName=TglMargins, Converter={StaticResource BoolVis}}">
+            <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                       Text="Рабочая область листа = рамка минус поля. План должен поместиться в неё целиком; формат перебирается от А3 к А0, затем удлинённые через «Кратность» (кратность 2 пропускается)."/>
+            <Grid Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <StackPanel Grid.Column="0">
+                <TextBlock Style="{StaticResource Caption}" Text="Слева, мм"/>
+                <TextBox x:Name="TxtLeft" Style="{StaticResource TextBox.Field}" Margin="0,3,0,0"/>
+              </StackPanel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Style="{StaticResource Caption}" Text="Справа, мм"/>
+                <TextBox x:Name="TxtRight" Style="{StaticResource TextBox.Field}" Margin="0,3,0,0"/>
+              </StackPanel>
+              <StackPanel Grid.Column="4">
+                <TextBlock Style="{StaticResource Caption}" Text="Сверху, мм"/>
+                <TextBox x:Name="TxtTop" Style="{StaticResource TextBox.Field}" Margin="0,3,0,0"/>
+              </StackPanel>
+              <StackPanel Grid.Column="6">
+                <TextBlock Style="{StaticResource Caption}" Text="Снизу (штамп), мм"/>
+                <TextBox x:Name="TxtBottom" Style="{StaticResource TextBox.Field}" Margin="0,3,0,0"/>
+              </StackPanel>
+            </Grid>
+            <CheckBox x:Name="ChkPortrait" Style="{StaticResource PP.CheckBox}" Margin="0,8,0,0"
+                      Content="Пробовать и книжную ориентацию"
+                      ToolTip="Если план вытянут вверх, книжный лист меньшего формата может подойти лучше альбомного"/>
+          </StackPanel>
+
+          <Border Style="{StaticResource Card.Result}" Margin="0,14,0,0">
+            <StackPanel>
+              <TextBlock x:Name="TxtResultLabel" Style="{StaticResource FieldLabel}"
+                         Text="БУДЕТ СОЗДАНО"/>
+              <TextBlock x:Name="TxtResult" Style="{StaticResource Body.Result}"
+                         Margin="0,4,0,0" TextWrapping="Wrap"/>
+              <TextBlock x:Name="TxtResultDetail" Style="{StaticResource Caption}"
+                         Margin="0,6,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+          </Border>
+
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+
+    <Border Grid.Row="2" Style="{StaticResource Rule}" Margin="0,12,0,0"/>
+
+    <Grid Grid.Row="3" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="TxtStatus" Grid.Column="0" Style="{StaticResource Status}"
+                 VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="BtnCancel" Content="Отмена"
+                Style="{StaticResource Button.Flat}" Margin="0,0,8,0"/>
+        <Button x:Name="BtnRun" Content="Создать листы"
+                Style="{StaticResource Button.Primary}" IsEnabled="False"/>
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>
