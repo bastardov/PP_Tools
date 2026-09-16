@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*-
-u"""Окно кнопки «Разместить на листы»: планы + образец + раздел + нумерация.
+u"""Окно кнопки «Разместить на листы».
 
-Окно ничего не знает про Revit: списки планов и листов ему готовит
+Два режима одним окном — чипсы сверху:
+
+* «Планы» — каждый отмеченный план на свой лист;
+* «Виды» — все отмеченные 3D-виды, разрезы, фасады на один лист рядами.
+
+Правая колонка общая: образец, раздел, нумерация, поля рамки. Режиму «Виды»
+дополнительно нужны начало имени листа и зазор между видами.
+
+Окно ничего не знает про Revit: списки видов и листов ему готовит
 `script.py`, обратно уходит словарь настроек запуска (см. `ask`).
 """
 
@@ -17,7 +25,35 @@ from System.Windows.Controls import RadioButton
 
 XAML_FILE = u"ui.xaml"
 
+MODE_PLANS = u"plans"
+MODE_VIEWS = u"views"
+
+NO_PREFIX = u"(без начала — только системы)"
+
 _NUMBER = re.compile(u"^\\s*(\\d+)\\s*$")
+
+MODE_TEXT = {
+    MODE_PLANS: {
+        u"subtitle": u"Каждый отмеченный план получает свой лист: рамка "
+                     u"копируется с листа-образца, формат подбирается под план, "
+                     u"план ставится по центру.",
+        u"label": u"КАКИЕ ПЛАНЫ РАЗМЕСТИТЬ",
+        u"search": u"Поиск по имени плана, например «Этаж 2»",
+        u"empty": u"Нет планов, которые ещё не размещены на листах.",
+        u"forms": (u"план", u"плана", u"планов"),
+    },
+    MODE_VIEWS: {
+        u"subtitle": u"Отмеченные виды ложатся рядами на один лист в порядке "
+                     u"списка: сначала приток, потом вытяжка. Не поместились "
+                     u"даже на самый большой формат — остаток уйдёт на "
+                     u"следующий лист.",
+        u"label": u"КАКИЕ ВИДЫ ПОЛОЖИТЬ НА ЛИСТ",
+        u"search": u"Поиск по имени вида, например «П1» или «Разрез»",
+        u"empty": u"Нет 3D-видов, разрезов и фасадов, которые ещё не "
+                  u"размещены на листах.",
+        u"forms": (u"вид", u"вида", u"видов"),
+    },
+}
 
 
 def brush(key):
@@ -95,62 +131,80 @@ def allocate_numbers(start, suffix, taken, count):
 
 class PlaceWindow(object):
 
-    def __init__(self, folder, plans, sheets, taken_numbers, name_for,
-                 defaults):
+    def __init__(self, folder, lists, sheets, taken_numbers, name_for,
+                 prefixes, defaults):
         u"""
-        plans         — [(подпись, {view, template}), ...]; template — имя
-                        шаблона вида или пусто
+        lists         — {режим: [(подпись, {view, template, warn}), ...]}
         sheets        — [{sheet, number, name, section}, ...] (pp_sheet_picker)
         taken_numbers — множество занятых номеров листов
-        name_for      — fn(вид) -> имя листа для предпросмотра
-        defaults      — {sample_id, section, suffix, margins, portrait,
-                         preselect}
+        name_for      — fn(режим, [виды], начало имени) -> имя листа
+        prefixes      — начала имени листа из настроек
+        defaults      — {mode, sample_id, suffix, margins, portrait, gap,
+                         prefix, current: {режим: подпись}}
         """
         self.window = pp_wpf.load_window_file(os.path.join(folder, XAML_FILE))
-        self.plans = list(plans)
+        self.items = dict(lists)
         self.sheets = list(sheets)
         self.taken = set(taken_numbers or [])
         self.name_for = name_for
+        self.prefixes = list(prefixes or [])
+        self.current = dict(defaults.get(u"current") or {})
         self.result = None
         self.chips = []
+        self.mode = None
         self._start_auto = True
         self._syncing = False
 
+        # Для каждого режима — свой список со своими отметками и фильтром
+        self.lists = {}
+        self.template_keys = {}
+        self.template_index = {}
+
+        for mode in (MODE_PLANS, MODE_VIEWS):
+            text = MODE_TEXT[mode]
+            self.lists[mode] = pp_check_list.CheckList(
+                self.items.get(mode) or [],
+                extra_button=(u"Текущий вид", self._on_current),
+                on_change=self._refresh,
+                search_hint=text[u"search"],
+                empty_text=text[u"empty"]
+            )
+            self.template_keys[mode] = [None]
+            self.template_index[mode] = 0
+
+            if self.current.get(mode):
+                self.lists[mode].set_checked([self.current[mode]])
+
         find = self.window.FindName
 
-        self.list = pp_check_list.CheckList(
-            self.plans,
-            extra_button=(u"Текущий вид", self._on_current),
-            on_change=self._refresh,
-            search_hint=u"Поиск по имени плана, например «Этаж 2»",
-            empty_text=u"Нет планов, которые ещё не размещены на листах."
-        )
-        find("ListHost").Content = self.list.element
-
-        self.current_label = defaults.get(u"current")
-
-        # Ключи фильтра по позициям ComboBox: None — все шаблоны
-        self.template_keys = [None]
-        self._fill_templates()
         self._fill_samples(defaults.get(u"sample_id"))
         self._fill_sections()
+        self._fill_prefixes(defaults.get(u"prefix"))
 
         margins = defaults.get(u"margins") or (20.0, 5.0, 5.0, 60.0)
         find("TxtLeft").Text = self._fmt(margins[0])
         find("TxtRight").Text = self._fmt(margins[1])
         find("TxtTop").Text = self._fmt(margins[2])
         find("TxtBottom").Text = self._fmt(margins[3])
+        find("TxtGap").Text = self._fmt(defaults.get(u"gap", 10.0))
         find("ChkPortrait").IsChecked = bool(defaults.get(u"portrait", True))
         find("TxtSuffix").Text = unicode(defaults.get(u"suffix") or u"")
 
         self._wire()
 
-        # Начальный выбор — после подписок (UI.md, п. 18)
+        # Начальное состояние — после подписок (UI.md, п. 18)
         self._apply_sample()
         self._reset_start()
 
-        if defaults.get(u"preselect"):
-            self.list.set_checked(defaults[u"preselect"])
+        mode = defaults.get(u"mode") or MODE_PLANS
+        if not self.items.get(mode):
+            other = MODE_VIEWS if mode == MODE_PLANS else MODE_PLANS
+            if self.items.get(other):
+                mode = other
+
+        chip = find("ChipViews") if mode == MODE_VIEWS else find("ChipPlans")
+        chip.IsChecked = True
+        self._set_mode(mode)
 
         pp_wpf.set_owner(self.window)
         pp_wpf.fit_to_screen(self.window)
@@ -169,43 +223,6 @@ class PlaceWindow(object):
             return unicode(int(round(value)))
 
         return unicode(value)
-
-    def _fill_templates(self):
-        u"""Фильтр по шаблону вида. Нет шаблонов ни у одного плана — прячем."""
-        find = self.window.FindName
-        combo = find("CmbTemplate")
-
-        counts = {}
-        for _label, item in self.plans:
-            template = item.get(u"template") or u""
-            counts[template] = counts.get(template, 0) + 1
-
-        if not any(counts.keys()):
-            find("PanelTemplate").Visibility = Visibility.Collapsed
-            return
-
-        combo.Items.Add(u"Все шаблоны ({0})".format(len(self.plans)))
-
-        names = sorted((name for name in counts if name), key=lambda n: n.lower())
-        if u"" in counts:
-            names.append(u"")
-
-        for name in names:
-            combo.Items.Add(u"{0} ({1})".format(
-                name or u"(без шаблона)", counts[name]))
-            self.template_keys.append(name)
-
-        combo.SelectedIndex = 0
-
-    def _apply_template_filter(self):
-        index = self.window.FindName("CmbTemplate").SelectedIndex
-
-        if index <= 0 or index >= len(self.template_keys):
-            self.list.set_filter(None)
-        else:
-            key = self.template_keys[index]
-            self.list.set_filter(
-                lambda _name, item: (item.get(u"template") or u"") == key)
 
     def _fill_samples(self, sample_id):
         combo = self.window.FindName("CmbSample")
@@ -253,11 +270,79 @@ class PlaceWindow(object):
             panel.Children.Add(chip)
             self.chips.append((section, chip))
 
+    def _fill_prefixes(self, stored):
+        combo = self.window.FindName("CmbPrefix")
+        combo.Items.Add(NO_PREFIX)
+
+        for prefix in self.prefixes:
+            combo.Items.Add(prefix)
+
+        # stored: None — ещё не запускали (берём первое начало из настроек),
+        # u"" — в прошлый раз сознательно выбрали «без начала».
+        if stored in self.prefixes:
+            combo.SelectedIndex = self.prefixes.index(stored) + 1
+        elif stored == u"":
+            combo.SelectedIndex = 0
+        else:
+            combo.SelectedIndex = 1 if self.prefixes else 0
+
+    def _fill_templates(self):
+        u"""Фильтр по шаблону вида для текущего режима. Нет шаблонов — прячем."""
+        find = self.window.FindName
+        combo = find("CmbTemplate")
+        items = self.items.get(self.mode) or []
+
+        counts = {}
+        for _label, item in items:
+            template = item.get(u"template") or u""
+            counts[template] = counts.get(template, 0) + 1
+
+        keys = [None]
+
+        self._syncing = True
+        try:
+            combo.Items.Clear()
+
+            if not any(counts.keys()):
+                find("PanelTemplate").Visibility = Visibility.Collapsed
+                self.template_keys[self.mode] = keys
+                return
+
+            find("PanelTemplate").Visibility = Visibility.Visible
+            combo.Items.Add(u"Все шаблоны ({0})".format(len(items)))
+
+            names = sorted((name for name in counts if name),
+                           key=lambda n: n.lower())
+            if u"" in counts:
+                names.append(u"")
+
+            for name in names:
+                combo.Items.Add(u"{0} ({1})".format(
+                    name or u"(без шаблона)", counts[name]))
+                keys.append(name)
+
+            self.template_keys[self.mode] = keys
+
+            index = self.template_index.get(self.mode, 0)
+            combo.SelectedIndex = index if 0 <= index < len(keys) else 0
+        finally:
+            self._syncing = False
+
     def _chip_handler(self, section):
         def handler(sender, args):
             if self._syncing:
                 return
             self.window.FindName("TxtSection").Text = section
+        return handler
+
+    def _mode_handler(self, mode):
+        guard = pp_wpf.guard(self._fail)
+
+        @guard
+        def handler(sender, args):
+            self._set_mode(mode)
+            self._refresh()
+
         return handler
 
     def _wire(self):
@@ -271,6 +356,9 @@ class PlaceWindow(object):
 
         @guard
         def on_template(sender, args):
+            if self._syncing:
+                return
+            self.template_index[self.mode] = find("CmbTemplate").SelectedIndex
             self._apply_template_filter()
             self._refresh()
 
@@ -303,13 +391,16 @@ class PlaceWindow(object):
         def on_cancel(sender, args):
             self.window.Close()
 
+        find("ChipPlans").Checked += self._mode_handler(MODE_PLANS)
+        find("ChipViews").Checked += self._mode_handler(MODE_VIEWS)
         find("CmbSample").SelectionChanged += on_sample
         find("CmbTemplate").SelectionChanged += on_template
+        find("CmbPrefix").SelectionChanged += on_any
         find("TxtSection").TextChanged += on_section
         find("TxtStart").TextChanged += on_start
         find("TxtSuffix").TextChanged += on_suffix
 
-        for name in ("TxtLeft", "TxtRight", "TxtTop", "TxtBottom"):
+        for name in ("TxtLeft", "TxtRight", "TxtTop", "TxtBottom", "TxtGap"):
             find(name).TextChanged += on_any
 
         find("ChkPortrait").Checked += on_any
@@ -318,6 +409,40 @@ class PlaceWindow(object):
         find("BtnCancel").Click += on_cancel
 
         pp_wpf.wire_keys(self.window, on_accept=self._accept)
+
+    # ---------- режим ------------------------------------------------------
+
+    def _set_mode(self, mode):
+        if mode == self.mode:
+            return
+
+        find = self.window.FindName
+        self.mode = mode
+        text = MODE_TEXT[mode]
+
+        find("TxtSubtitle").Text = text[u"subtitle"]
+        find("TxtListLabel").Text = text[u"label"]
+        find("ListHost").Content = self.lists[mode].element
+
+        views_only = Visibility.Visible if mode == MODE_VIEWS \
+            else Visibility.Collapsed
+        find("PanelPrefix").Visibility = views_only
+        find("PanelGap").Visibility = views_only
+
+        self._fill_templates()
+        self._apply_template_filter()
+
+    def _apply_template_filter(self):
+        keys = self.template_keys.get(self.mode) or [None]
+        index = self.template_index.get(self.mode, 0)
+        lst = self.lists[self.mode]
+
+        if index <= 0 or index >= len(keys):
+            lst.set_filter(None)
+        else:
+            key = keys[index]
+            lst.set_filter(
+                lambda _name, item: (item.get(u"template") or u"") == key)
 
     # ---------- состояние --------------------------------------------------
 
@@ -352,34 +477,45 @@ class PlaceWindow(object):
         self._start_auto = True
 
     def _on_current(self, sender, args):
-        if self.current_label:
-            names = set(name for name, _item in self.list.get_checked())
-            names.add(self.current_label)
-            self.list.set_checked(names)
+        label = self.current.get(self.mode)
+        lst = self.lists[self.mode]
+
+        if label:
+            names = set(name for name, _item in lst.get_checked())
+            names.add(label)
+            lst.set_checked(names)
             self._refresh()
-        else:
+        elif self.mode == MODE_PLANS:
             self._fail(u"Активный вид — не план или уже лежит на листе.")
+        else:
+            self._fail(u"Активный вид — не 3D-вид, разрез или фасад, "
+                       u"или уже лежит на листе.")
 
-    def _read_margins(self):
-        find = self.window.FindName
-        values = []
+    def _prefix(self):
+        index = self.window.FindName("CmbPrefix").SelectedIndex
 
-        for name in ("TxtLeft", "TxtRight", "TxtTop", "TxtBottom"):
-            text = unicode(find(name).Text or u"").strip().replace(u",", u".")
-            value = float(text)
-            if value < 0:
-                raise ValueError(name)
-            values.append(value)
+        if 1 <= index <= len(self.prefixes):
+            return self.prefixes[index - 1]
 
-        return tuple(values)
+        return u""
+
+    def _read_number(self, name, allow_zero=True):
+        text = unicode(self.window.FindName(name).Text or u"")
+        value = float(text.strip().replace(u",", u"."))
+
+        if value < 0 or (not allow_zero and value == 0):
+            raise ValueError(name)
+
+        return value
 
     def _collect(self):
         u"""Собрать настройки из окна. Возврат: (словарь, ошибка)."""
         find = self.window.FindName
+        text = MODE_TEXT[self.mode]
 
-        checked = self.list.get_checked()
+        checked = self.lists[self.mode].get_checked()
         if not checked:
-            return None, u"Отметьте хотя бы один план."
+            return None, u"Отметьте хотя бы один {0}.".format(text[u"forms"][0])
 
         sample = self._sample_row()
         if sample is None:
@@ -392,15 +528,23 @@ class PlaceWindow(object):
             return None, u"Начальный номер — целое число."
 
         try:
-            margins = self._read_margins()
+            margins = tuple(self._read_number(name) for name in
+                            ("TxtLeft", "TxtRight", "TxtTop", "TxtBottom"))
         except Exception:
             return None, u"Поля рамки — неотрицательные числа в мм."
+
+        try:
+            gap = self._read_number("TxtGap")
+        except Exception:
+            return None, u"Зазор между видами — неотрицательное число в мм."
 
         suffix = unicode(find("TxtSuffix").Text or u"").strip()
 
         return {
+            u"mode": self.mode,
             u"views": [item[u"view"] for _name, item in checked],
             u"labels": [name for name, _item in checked],
+            u"warned": len([1 for _name, item in checked if item.get(u"warn")]),
             u"sample": sample[u"sheet"],
             u"sample_label": u"{0} — {1}".format(
                 sample[u"number"], sample[u"name"]).strip(u" —"),
@@ -408,10 +552,15 @@ class PlaceWindow(object):
             u"start": int(match.group(1)),
             u"suffix": suffix,
             u"margins": margins,
+            u"gap": gap,
+            u"prefix": self._prefix(),
             u"portrait": bool(find("ChkPortrait").IsChecked)
         }, None
 
     def _refresh(self):
+        if self.mode is None:
+            return
+
         find = self.window.FindName
         options, error = self._collect()
 
@@ -429,25 +578,17 @@ class PlaceWindow(object):
             return
 
         count = len(options[u"views"])
-        numbers = allocate_numbers(
-            options[u"start"], options[u"suffix"], self.taken, count)
+        forms = MODE_TEXT[self.mode][u"forms"]
 
         find("BtnRun").IsEnabled = True
-        status.Text = u"Отмечено {0} {1}.".format(
-            count, plural(count, (u"план", u"плана", u"планов")))
+        status.Text = u"Отмечено {0} {1}.".format(count, plural(count, forms))
         status.Foreground = brush(u"Muted")
 
-        result.Text = u"{0} {1}: {2}".format(
-            count,
-            plural(count, (u"лист", u"листа", u"листов")),
-            self._range_text(numbers))
-        result.Foreground = brush(u"Ink")
-
-        first_name = u""
-        try:
-            first_name = self.name_for(options[u"views"][0]) or u""
-        except Exception:
-            first_name = u""
+        if options[u"warned"]:
+            status.Text = (
+                u"{0} Без подрезки: {1} — на листе будут размером со всю "
+                u"модель.".format(status.Text, options[u"warned"]))
+            status.Foreground = brush(u"Hot")
 
         lines = []
         if options[u"section"]:
@@ -456,9 +597,38 @@ class PlaceWindow(object):
             lines.append(u"Раздел не заполняется.")
         lines.append(u"Рамка как на листе «{0}».".format(
             options[u"sample_label"]))
-        if first_name:
-            lines.append(u"Первый лист: «{0}».".format(first_name))
 
+        try:
+            name = self.name_for(self.mode, options[u"views"],
+                                 options[u"prefix"]) or u""
+        except Exception:
+            name = u""
+
+        if self.mode == MODE_PLANS:
+            numbers = allocate_numbers(
+                options[u"start"], options[u"suffix"], self.taken, count)
+
+            result.Text = u"{0} {1}: {2}".format(
+                count, plural(count, (u"лист", u"листа", u"листов")),
+                self._range_text(numbers))
+
+            if name:
+                lines.append(u"Первый лист: «{0}».".format(name))
+        else:
+            number = allocate_numbers(
+                options[u"start"], options[u"suffix"], self.taken, 1)[0]
+
+            result.Text = u"Лист {0}: {1} {2}".format(
+                number, count, plural(count, forms))
+
+            if name:
+                lines.append(u"Имя: «{0}».".format(name))
+
+            lines.append(u"Если все виды не поместятся даже на самый большой "
+                         u"формат, остаток уйдёт на следующие номера — "
+                         u"отчёт об этом предупредит.")
+
+        result.Foreground = brush(u"Ink")
         detail.Text = u" ".join(lines)
 
     @staticmethod
@@ -491,7 +661,7 @@ class PlaceWindow(object):
         return self.result
 
 
-def ask(folder, plans, sheets, taken_numbers, name_for, defaults):
+def ask(folder, lists, sheets, taken_numbers, name_for, prefixes, defaults):
     u"""Показать окно. Возврат: словарь настроек или None."""
-    return PlaceWindow(
-        folder, plans, sheets, taken_numbers, name_for, defaults).show()
+    return PlaceWindow(folder, lists, sheets, taken_numbers, name_for,
+                       prefixes, defaults).show()

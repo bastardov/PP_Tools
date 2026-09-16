@@ -4,13 +4,11 @@ try: import pp_usage; pp_usage.log(__file__)
 except Exception: pass
 
 import clr
-import re
 
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 
 from Autodesk.Revit.DB import BuiltInParameter, Transaction, ViewSheet
-from pp_settings import load_settings, DEFAULT_SETTINGS
 
 import os
 import sys
@@ -22,6 +20,7 @@ if _HERE not in sys.path:
     sys.path.append(_HERE)
 
 import pp_wpf
+import pp_sheet_naming
 import pp_sheetname_views_window
 
 
@@ -37,18 +36,20 @@ class Stop(Exception):
 
 def fail(message):
     raise Stop(message)
-SYSTEM_PATTERN = re.compile(
-    ur"(?<![A-Za-zА-Яа-я0-9])([A-Za-zА-Яа-я]{1,3})\s*(\d+)(?:\.(\d+))?"
-    ur"(?![A-Za-zА-Яа-я0-9.])"
-)
-PREFIX_SORT_ORDER = {
-    u"В": 0,
-    u"Д": 1,
-    u"П": 2,
-    u"Х": 3,
-    u"К": 4
-}
-_settings = load_settings()
+
+
+# ── Разбор систем в именах видов — общий модуль lib/pp_sheet_naming ──────────
+# Порядок систем в имени у этой кнопки прежний: В, Д, П, Х, К.
+
+extract_systems_from_view_name = pp_sheet_naming.extract_systems
+_system_sort_key = pp_sheet_naming.system_sort_key
+_system_to_text = pp_sheet_naming.system_to_text
+compress_system_ranges = pp_sheet_naming.compress_system_ranges
+build_sheet_name = pp_sheet_naming.build_views_name
+
+
+def get_prefix_options():
+    return pp_sheet_naming.get_prefix_options()
 
 
 def get_sheet_viewports(sheet):
@@ -61,28 +62,6 @@ def get_sheet_viewports(sheet):
             viewports.append(viewport)
 
     return viewports
-
-
-def get_prefix_options():
-    prefixes = _settings.get(
-        "sheet_name_prefixes",
-        DEFAULT_SETTINGS.get("sheet_name_prefixes", [])
-    )
-
-    result = []
-
-    for prefix in prefixes:
-        prefix_text = unicode(prefix).strip()
-        if prefix_text and prefix_text not in result:
-            result.append(prefix_text)
-
-    if not result:
-        for prefix in DEFAULT_SETTINGS.get("sheet_name_prefixes", []):
-            prefix_text = unicode(prefix).strip()
-            if prefix_text and prefix_text not in result:
-                result.append(prefix_text)
-
-    return result
 
 
 def get_view_names_from_sheet(sheet):
@@ -102,157 +81,6 @@ def get_view_names_from_sheet(sheet):
             view_names.append(view_name)
 
     return view_names
-
-
-def extract_systems_from_view_name(view_name):
-    systems = []
-    seen = set()
-
-    if not view_name:
-        return systems
-
-    for match in SYSTEM_PATTERN.finditer(view_name):
-        prefix = _normalize_system_prefix(match.group(1))
-        if not _is_supported_system_prefix(prefix):
-            continue
-
-        number = int(match.group(2))
-        sub_text = match.group(3)
-        sub_number = int(sub_text) if sub_text else None
-        key = (prefix, number, sub_number)
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-        systems.append(key)
-
-    return systems
-
-
-def _normalize_system_prefix(raw_prefix):
-    prefix_text = unicode(raw_prefix).strip().upper()
-    prefix_text = prefix_text.replace(u" ", u"")
-    prefix_text = prefix_text.replace(u"Ё", u"Е")
-    return prefix_text
-
-
-def _is_supported_system_prefix(prefix):
-    if not prefix:
-        return False
-
-    first_char = prefix[0]
-    return first_char in PREFIX_SORT_ORDER
-
-
-def _system_sort_key(system_item):
-    prefix, number, sub_number = system_item
-    prefix_rank = PREFIX_SORT_ORDER.get(prefix, 999)
-    has_sub = 1 if sub_number is not None else 0
-    return (prefix_rank, prefix, number, has_sub, sub_number or 0)
-
-
-def compress_system_ranges(systems):
-    unique_systems = sorted(set(systems), key=_system_sort_key)
-    if not unique_systems:
-        return u""
-
-    grouped_items = {}
-    grouped_order = []
-
-    for prefix, number, sub_number in unique_systems:
-        if prefix not in grouped_items:
-            grouped_items[prefix] = []
-            grouped_order.append(prefix)
-
-        grouped_items[prefix].append((number, sub_number))
-
-    parts = []
-
-    for prefix in grouped_order:
-        items = sorted(set(grouped_items[prefix]), key=_item_sort_key)
-        parts.extend(_compress_prefix_items(prefix, items))
-
-    return u", ".join(parts)
-
-
-def _item_sort_key(item):
-    number, sub_number = item
-    has_sub = 1 if sub_number is not None else 0
-    return (number, has_sub, sub_number or 0)
-
-
-def _compress_prefix_items(prefix, items):
-    parts = []
-    index = 0
-    item_count = len(items)
-
-    while index < item_count:
-        range_start = items[index]
-        range_end = range_start
-        next_index = index + 1
-
-        while next_index < item_count and _is_next_in_sequence(range_end, items[next_index]):
-            range_end = items[next_index]
-            next_index += 1
-
-        parts.append(_format_item_range(prefix, range_start, range_end))
-        index = next_index
-
-    return parts
-
-
-def _is_next_in_sequence(previous_item, current_item):
-    previous_number, previous_sub = previous_item
-    current_number, current_sub = current_item
-
-    if previous_sub is None and current_sub is None:
-        return current_number == previous_number + 1
-
-    if previous_sub is not None and current_sub is not None:
-        return (
-            current_number == previous_number and
-            current_sub == previous_sub + 1
-        )
-
-    return False
-
-
-def _format_item_range(prefix, range_start, range_end):
-    if range_start == range_end:
-        return u"{0}{1}".format(prefix, _format_system_number(range_start))
-
-    return u"{0}{1}-{0}{2}".format(
-        prefix,
-        _format_system_number(range_start),
-        _format_system_number(range_end)
-    )
-
-
-def _format_system_number(item):
-    number, sub_number = item
-    if sub_number is None:
-        return u"{0}".format(number)
-
-    return u"{0}.{1}".format(number, sub_number)
-
-
-def build_sheet_name(prefix, systems):
-    prefix_text = (prefix or u"").strip()
-    compressed_systems = compress_system_ranges(systems)
-
-    if prefix_text and compressed_systems:
-        return u"{0} {1}".format(prefix_text, compressed_systems)
-
-    if prefix_text:
-        return prefix_text
-
-    return compressed_systems
-
-
-def _system_to_text(system_item):
-    prefix, number, sub_number = system_item
-    return u"{0}{1}".format(prefix, _format_system_number((number, sub_number)))
 
 
 def _get_selected_systems(checked_list, ordered_systems, changed_index=None, changed_state=None):

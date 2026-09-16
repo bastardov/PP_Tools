@@ -2,9 +2,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Разместить на листы"
         Width="1000"
-        Height="780"
+        Height="820"
         MinWidth="880"
-        MinHeight="600"
+        MinHeight="640"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
@@ -19,16 +19,16 @@
 
   <Grid Margin="20">
     <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/>   <!-- заголовок -->
+      <RowDefinition Height="Auto"/>                   <!-- заголовок -->
       <RowDefinition Height="*" MinHeight="260"/>      <!-- две колонки -->
-      <RowDefinition Height="Auto"/>   <!-- разделитель -->
-      <RowDefinition Height="Auto"/>   <!-- подвал -->
+      <RowDefinition Height="Auto"/>                   <!-- разделитель -->
+      <RowDefinition Height="Auto"/>                   <!-- подвал -->
     </Grid.RowDefinitions>
 
     <StackPanel Grid.Row="0">
       <TextBlock Style="{StaticResource H1}" Text="Разместить на листы"/>
-      <TextBlock Style="{StaticResource Subtitle}" Margin="0,2,0,0" TextWrapping="Wrap"
-                 Text="Каждый отмеченный план получает свой лист: рамка копируется с листа-образца, формат подбирается под план, план ставится по центру."/>
+      <TextBlock x:Name="TxtSubtitle" Style="{StaticResource Subtitle}"
+                 Margin="0,2,0,0" TextWrapping="Wrap"/>
     </StackPanel>
 
     <Grid Grid.Row="1" Margin="0,14,0,0">
@@ -37,25 +37,39 @@
         <ColumnDefinition Width="420"/>
       </Grid.ColumnDefinitions>
 
-      <!-- ===== Левая колонка: какие планы ===== -->
+      <!-- ===== Левая колонка: что размещаем ===== -->
       <Grid Grid.Column="0" Margin="0,0,14,0">
         <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
           <RowDefinition Height="Auto"/>
           <RowDefinition Height="Auto"/>
           <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Style="{StaticResource FieldLabel}"
-                   Text="КАКИЕ ПЛАНЫ РАЗМЕСТИТЬ"/>
-
-        <StackPanel x:Name="PanelTemplate" Grid.Row="1" Margin="0,6,0,0">
-          <ComboBox x:Name="CmbTemplate" Style="{StaticResource PP.ComboBox}"
-                    ToolTip="Показывать в списке только планы с выбранным шаблоном вида"/>
-          <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                     Text="Фильтр по шаблону вида. Отметки не сбрасываются: можно набрать планы из нескольких шаблонов."/>
+        <StackPanel Grid.Row="0">
+          <TextBlock Style="{StaticResource FieldLabel}" Text="ЧТО РАЗМЕЩАЕМ"/>
+          <WrapPanel Margin="0,6,0,0">
+            <RadioButton x:Name="ChipPlans" Style="{StaticResource RadioButton.Chip}"
+                         GroupName="Mode" Content="Планы — каждый на свой лист" MinWidth="0"
+                         Margin="0,0,6,0"
+                         ToolTip="Планы этажей, потолков, зон: один план — один лист, по центру"/>
+            <RadioButton x:Name="ChipViews" Style="{StaticResource RadioButton.Chip}"
+                         GroupName="Mode" Content="Виды — вместе на один лист" MinWidth="0"
+                         ToolTip="3D-виды, разрезы, фасады, чертёжные виды: все отмеченные рядами на одном листе"/>
+          </WrapPanel>
         </StackPanel>
 
-        <ContentControl x:Name="ListHost" Grid.Row="2" Margin="0,8,0,0"
+        <TextBlock x:Name="TxtListLabel" Grid.Row="1" Margin="0,14,0,0"
+                   Style="{StaticResource FieldLabel}" Text="КАКИЕ ПЛАНЫ РАЗМЕСТИТЬ"/>
+
+        <StackPanel x:Name="PanelTemplate" Grid.Row="2" Margin="0,6,0,0">
+          <ComboBox x:Name="CmbTemplate" Style="{StaticResource PP.ComboBox}"
+                    ToolTip="Показывать в списке только виды с выбранным шаблоном вида"/>
+          <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                     Text="Фильтр по шаблону вида. Отметки не сбрасываются: можно набрать виды из нескольких шаблонов."/>
+        </StackPanel>
+
+        <ContentControl x:Name="ListHost" Grid.Row="3" Margin="0,8,0,0"
                         HorizontalContentAlignment="Stretch"
                         VerticalContentAlignment="Stretch"/>
       </Grid>
@@ -103,12 +117,22 @@
             </StackPanel>
           </Grid>
 
+          <!-- Только режим «Виды»: начало имени листа -->
+          <StackPanel x:Name="PanelPrefix" Margin="0,14,0,0">
+            <TextBlock Style="{StaticResource FieldLabel}" Text="НАЧАЛО ИМЕНИ ЛИСТА"/>
+            <ComboBox x:Name="CmbPrefix" Style="{StaticResource PP.ComboBox}"
+                      Margin="0,6,0,0"
+                      ToolTip="Начало имени из панели «Настройки»; системы дописываются по именам видов"/>
+            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                       Text="К началу дописываются системы из имён видов, которые легли на лист: «Схема систем П1-П3, В1». Список — в панели «Настройки»."/>
+          </StackPanel>
+
           <ToggleButton x:Name="TglMargins" Style="{StaticResource ToggleButton.Expander}"
                         Margin="0,10,0,0" Content="Поля рамки и подбор формата"/>
           <StackPanel x:Name="PanelMargins" Margin="0,4,0,0"
                       Visibility="{Binding IsChecked, ElementName=TglMargins, Converter={StaticResource BoolVis}}">
             <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
-                       Text="Рабочая область листа = рамка минус поля. План должен поместиться в неё целиком; формат перебирается от А3 к А0, затем удлинённые через «Кратность» (кратность 2 пропускается)."/>
+                       Text="Рабочая область листа = рамка минус поля. Формат перебирается от А3 к А0, затем удлинённые через «Кратность» (кратность 2 пропускается)."/>
             <Grid Margin="0,8,0,0">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -136,9 +160,16 @@
                 <TextBox x:Name="TxtBottom" Style="{StaticResource TextBox.Field}" Margin="0,3,0,0"/>
               </StackPanel>
             </Grid>
+
+            <StackPanel x:Name="PanelGap" Margin="0,8,0,0">
+              <TextBlock Style="{StaticResource Caption}" Text="Зазор между видами, мм"/>
+              <TextBox x:Name="TxtGap" Style="{StaticResource TextBox.Field}" Margin="0,3,0,0"
+                       Width="120" HorizontalAlignment="Left"/>
+            </StackPanel>
+
             <CheckBox x:Name="ChkPortrait" Style="{StaticResource PP.CheckBox}" Margin="0,8,0,0"
                       Content="Пробовать и книжную ориентацию"
-                      ToolTip="Если план вытянут вверх, книжный лист меньшего формата может подойти лучше альбомного"/>
+                      ToolTip="Если вид вытянут вверх, книжный лист меньшего формата может подойти лучше альбомного"/>
           </StackPanel>
 
           <Border Style="{StaticResource Card.Result}" Margin="0,14,0,0">

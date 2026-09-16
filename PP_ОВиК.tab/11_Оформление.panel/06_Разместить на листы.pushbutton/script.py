@@ -3,23 +3,27 @@
 try: import pp_usage; pp_usage.log(__file__)
 except Exception: pass
 
-u"""Разместить на листы: каждый отмеченный план — на свой новый лист.
+u"""Разместить на листы — два режима.
 
-Схема работы (см. Memory.md, «Оформление / Разместить на листы»):
+«Планы»: каждый отмеченный план — на свой новый лист, по центру.
+«Виды»: 3D-виды, разрезы, фасады, чертёжные виды — все на один лист рядами;
+не поместились даже в самый большой формат — остаток переносится на
+следующий лист (с предупреждением в отчёте).
+
+Общая схема (см. Memory.md, «Оформление / Разместить на листы»):
 
 1. Лист создаётся ПУСТЫМ (без основной надписи), на него копируется рамка
-   с листа-образца — вместе со всеми параметрами экземпляра («Формат А»,
-   «Кратность», ориентация...). Семейство рамки искать не нужно: готовый
-   лист в проекте есть всегда.
-2. План ставится на лист, и его реальный габарит на листе читается через
-   Viewport.GetBoxOutline() — он уже учитывает подрезку, масштаб и подпись.
-   Считать размер заранее из crop box ненадёжно.
-3. Формат перебирается от А3 к А0 (потом удлинённые через «Кратность»,
-   кратность 2 пропускается — в семействе это лист в двойном масштабе):
+   с листа-образца вместе со всеми параметрами экземпляра («Формат А»,
+   «Кратность», ориентация...). Семейство рамки искать не нужно.
+2. Виды ставятся на лист, и их реальный габарит читается по факту:
+   Viewport.GetBoxOutline() (сам вид) плюс GetLabelOutline() (подпись —
+   в GetBoxOutline она не входит). Считать размер из crop box ненадёжно.
+3. Формат перебирается от А3 к А0, потом удлинённые через «Кратность»
+   (кратность 2 пропускается — в семействе это лист в двойном масштабе):
    параметр ставится, документ регенерируется, габарит рамки читается из
-   BoundingBox. Первый формат, в чью рабочую область (рамка минус поля)
-   план влез, — итоговый.
-4. Видовой экран сдвигается в центр рабочей области.
+   BoundingBox. Первый формат, где всё влезло в рабочую область (рамка минус
+   поля), — итоговый.
+4. Виды сдвигаются на свои места MoveElement-ом на разность прямоугольников.
 """
 
 import os
@@ -48,6 +52,7 @@ if _HERE not in sys.path:
 import pp_wpf
 import pp_sheet_picker
 import pp_sheet_naming
+import pp_place_layout
 import pp_place_window
 
 from pp_settings import load_settings, save_settings
@@ -59,10 +64,18 @@ doc = uidoc.Document
 TOOL_TITLE = u"Разместить на листы"
 SETTINGS_KEY = "sheet_place_settings"
 
+MODE_PLANS = pp_place_window.MODE_PLANS
+MODE_VIEWS = pp_place_window.MODE_VIEWS
+
 MM = 304.8  # футов в миллиметре: feet * MM = mm
 
 PLAN_TYPES = (ViewType.FloorPlan, ViewType.CeilingPlan,
               ViewType.AreaPlan, ViewType.EngineeringPlan)
+
+# Режим «Виды». Спецификации и легенды сюда не входят: спецификация на листе —
+# не видовой экран, а легенда может стоять на многих листах сразу.
+OTHER_VIEW_TYPES = (ViewType.ThreeD, ViewType.Section, ViewType.Elevation,
+                    ViewType.Detail, ViewType.DraftingView)
 
 PARAM_FORMAT = u"Формат А"
 PARAM_MULT = u"Кратность"
@@ -87,6 +100,12 @@ ELONGATED = {
     0: (3,),
 }
 
+# Лист, на который переносятся виды, когда все не влезли никуда: самый
+# большой СТАНДАРТНЫЙ формат. Удлинённый лист частями выглядел бы странно.
+OVERFLOW_FORMAT = (0, 1, 0)
+
+NO_CROP = u"нет подрезки"
+
 
 class Stop(Exception):
     u"""Осмысленная остановка: сообщение уходит в окно отчёта."""
@@ -95,6 +114,10 @@ class Stop(Exception):
 
 def fail(message):
     raise Stop(message)
+
+
+def plural(count, forms_):
+    return pp_place_window.plural(count, forms_)
 
 
 # ── Сбор данных для окна ───────────────────────────────────────────────────────
@@ -122,14 +145,25 @@ def template_name(view):
         return u""
 
 
-def collect_plans():
-    u"""[(подпись, {view, template}), ...] — планы, ещё не лежащие на листах."""
+def view_warning(view):
+    u"""Замечание к виду в списке. 3D без подрезки на листе — размером с модель."""
+    try:
+        if view.ViewType == ViewType.ThreeD and not view.CropBoxActive:
+            return NO_CROP
+    except Exception:
+        pass
+
+    return u""
+
+
+def collect_views(types, sort_key):
+    u"""[(подпись, {view, template, warn}), ...] — виды, ещё не лежащие на листах."""
     placed = views_on_sheets()
     rows = []
 
     for view in FilteredElementCollector(doc).OfClass(View):
         try:
-            if view.IsTemplate or view.ViewType not in PLAN_TYPES:
+            if view.IsTemplate or view.ViewType not in types:
                 continue
         except Exception:
             continue
@@ -144,23 +178,33 @@ def collect_plans():
 
         rows.append((name, view))
 
-    rows.sort(key=lambda row: pp_sheet_picker.natural_key(row[0]))
+    rows.sort(key=lambda row: sort_key(row[0]))
 
-    labels = {}
+    counts = {}
     for name, _view in rows:
-        labels[name] = labels.get(name, 0) + 1
+        counts[name] = counts.get(name, 0) + 1
 
     items = []
     for name, view in rows:
         label = name
-        if labels[name] > 1:
+
+        if counts[name] > 1:
             label = u"{0}   ·   id {1}".format(name, view.Id.IntegerValue)
-        items.append((label, {u"view": view, u"template": template_name(view)}))
+
+        warn = view_warning(view)
+        if warn:
+            label = u"{0}   ·   {1}".format(label, warn)
+
+        items.append((label, {
+            u"view": view,
+            u"template": template_name(view),
+            u"warn": warn,
+        }))
 
     return items
 
 
-def sheet_name_for(view):
+def plan_sheet_name(view):
     try:
         proposed, _warning = pp_sheet_naming.propose([view.Name])
     except Exception:
@@ -169,7 +213,28 @@ def sheet_name_for(view):
     return proposed or unicode(view.Name)
 
 
-def load_defaults(plans, sheets):
+def views_sheet_name(prefix, views):
+    try:
+        proposed, _warning = pp_sheet_naming.propose_views(
+            prefix, [view.Name for view in views])
+    except Exception:
+        proposed = u""
+
+    return proposed or (prefix or u"").strip() or unicode(views[0].Name)
+
+
+def name_for(mode, views, prefix):
+    u"""Имя листа для предпросмотра в окне."""
+    if not views:
+        return u""
+
+    if mode == MODE_PLANS:
+        return plan_sheet_name(views[0])
+
+    return views_sheet_name(prefix, views)
+
+
+def load_defaults(lists, sheets):
     settings = load_settings()
     stored = settings.get(SETTINGS_KEY) or {}
 
@@ -179,9 +244,11 @@ def load_defaults(plans, sheets):
         u"margins": tuple(float(v) for v in margins),
         u"suffix": stored.get(u"suffix", u"ОВ"),
         u"portrait": bool(stored.get(u"portrait", True)),
+        u"gap": float(stored.get(u"gap", 10.0)),
+        u"prefix": stored.get(u"prefix"),
+        u"mode": stored.get(u"mode", MODE_PLANS),
         u"sample_id": None,
-        u"current": None,
-        u"preselect": [],
+        u"current": {},
     }
 
     active = doc.ActiveView
@@ -189,13 +256,14 @@ def load_defaults(plans, sheets):
     if isinstance(active, ViewSheet):
         defaults[u"sample_id"] = active.Id
     else:
-        for label, item in plans:
-            if item[u"view"].Id == active.Id:
-                defaults[u"current"] = label
-                defaults[u"preselect"] = [label]
-                break
+        # Активный вид сразу отмечен и открывает свой режим
+        for mode, items in lists.items():
+            for label, item in items:
+                if item[u"view"].Id == active.Id:
+                    defaults[u"current"][mode] = label
+                    defaults[u"mode"] = mode
+                    break
 
-        # Образец по умолчанию — последний лист прошлого запуска, если жив
         stored_id = stored.get(u"sample_id")
         if stored_id:
             for row in sheets:
@@ -211,6 +279,9 @@ def store_defaults(settings, options):
         u"margins": list(options[u"margins"]),
         u"suffix": options[u"suffix"],
         u"portrait": options[u"portrait"],
+        u"gap": options[u"gap"],
+        u"prefix": options[u"prefix"],
+        u"mode": options[u"mode"],
         u"sample_id": options[u"sample"].Id.IntegerValue,
     }
 
@@ -287,6 +358,10 @@ def format_candidates(portrait_too):
     return candidates
 
 
+def largest_landscape(candidates):
+    return [item for item in candidates if not item[2]][-1]
+
+
 def describe_format(fmt, mult, portrait):
     text = u"А{0}".format(fmt)
 
@@ -315,6 +390,54 @@ def work_area(title_block, sheet, margins):
     x0, y0, x1, y1 = bbox_mm(title_block, sheet)
 
     return x0 + left, y0 + bottom, x1 - right, y1 - top
+
+
+# ── Видовой экран: габарит с подписью и перенос ────────────────────────────────
+
+def viewport_rect(viewport):
+    u"""Прямоугольник вида на листе в мм — вместе с подписью.
+
+    GetBoxOutline() подпись не включает; GetLabelOutline() появился в
+    Revit 2022. Если подписи нет (скрыта типом экрана), её прямоугольник
+    вырожден — такой не учитываем.
+    """
+    x0, y0, x1, y1 = outline_mm(viewport.GetBoxOutline())
+
+    try:
+        lx0, ly0, lx1, ly1 = outline_mm(viewport.GetLabelOutline())
+
+        if lx1 - lx0 > 0.1 and ly1 - ly0 > 0.1:
+            x0 = min(x0, lx0)
+            y0 = min(y0, ly0)
+            x1 = max(x1, lx1)
+            y1 = max(y1, ly1)
+    except Exception:
+        pass
+
+    return x0, y0, x1, y1
+
+
+def move_viewport(viewport, rect, target_x0, target_y0):
+    dx = target_x0 - rect[0]
+    dy = target_y0 - rect[1]
+
+    if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+        return
+
+    ElementTransformUtils.MoveElement(
+        doc, viewport.Id, XYZ(dx / MM, dy / MM, 0.0))
+
+
+def add_viewport(sheet, view, viewport_type):
+    viewport = Viewport.Create(doc, sheet.Id, view.Id, XYZ.Zero)
+
+    if viewport_type is not None:
+        try:
+            viewport.ChangeTypeId(viewport_type)
+        except Exception:
+            pass
+
+    return viewport
 
 
 # ── Создание листа ─────────────────────────────────────────────────────────────
@@ -398,95 +521,254 @@ def sample_viewport_type(sample):
     return None
 
 
-def create_sheet(view, number, options, section_param, viewport_type,
-                 candidates):
-    u"""Один лист под один план. Возврат: (лист, описание формата, замечание)."""
-    sample = options[u"sample"]
-    margins = options[u"margins"]
+class Run(object):
+    u"""Общее состояние одного запуска: образец, нумерация, итоги."""
 
-    sheet = ViewSheet.Create(doc, ElementId.InvalidElementId)
+    def __init__(self, options, section_param, taken):
+        self.options = options
+        self.section_param = section_param
+        self.taken = set(taken)
+        self.next_value = options[u"start"]
+        self.viewport_type = sample_viewport_type(options[u"sample"])
+        self.candidates = format_candidates(options[u"portrait"])
+        self.created = []    # [(лист, формат, число видов)]
+        self.warnings = []
+        self.done = set()      # id видов, легших на листы
+        self.skipped = set()   # id видов, которые Revit не даёт ставить на лист
 
-    # Рамка с образца — со всеми параметрами экземпляра
-    source_blocks = title_blocks_on(sample)
-    if not source_blocks:
-        raise Stop(u"На листе-образце нет основной надписи.")
+        self.source_blocks = title_blocks_on(options[u"sample"])
+        if not self.source_blocks:
+            raise Stop(u"На листе-образце нет основной надписи.")
 
-    ids = List[ElementId]([block.Id for block in source_blocks[:1]])
-    ElementTransformUtils.CopyElements(
-        sample, ids, sheet, Transform.Identity, CopyPasteOptions())
+    def next_number(self):
+        u"""Следующий свободный номер «N<суффикс>» — занятые пропускаются."""
+        suffix = self.options[u"suffix"]
+        number = pp_place_window.allocate_numbers(
+            self.next_value, suffix, self.taken, 1)[0]
 
-    doc.Regenerate()
+        self.taken.add(number)
+        self.next_value = int(number[:len(number) - len(suffix)]) + 1
 
-    blocks = title_blocks_on(sheet)
-    if not blocks:
-        raise Stop(u"Не удалось скопировать основную надпись с образца.")
-    title_block = blocks[0]
+        return number
 
-    copy_sheet_params(sample, sheet)
-    set_section(sheet, title_block, section_param, options[u"section"])
+    def new_sheet(self):
+        u"""Пустой лист + рамка и параметры образца + раздел + номер."""
+        sample = self.options[u"sample"]
+        sheet = ViewSheet.Create(doc, ElementId.InvalidElementId)
 
-    sheet.SheetNumber = number
-    set_sheet_name(sheet, sheet_name_for(view))
+        ids = List[ElementId]([self.source_blocks[0].Id])
+        ElementTransformUtils.CopyElements(
+            sample, ids, sheet, Transform.Identity, CopyPasteOptions())
 
-    # План — на лист, габарит — по факту
+        doc.Regenerate()
+
+        blocks = title_blocks_on(sheet)
+        if not blocks:
+            raise Stop(u"Не удалось скопировать основную надпись с образца.")
+        title_block = blocks[0]
+
+        copy_sheet_params(sample, sheet)
+        set_section(sheet, title_block, self.section_param,
+                    self.options[u"section"])
+
+        sheet.SheetNumber = self.next_number()
+
+        return sheet, title_block
+
+
+# ── Режим «Планы»: один план — один лист ───────────────────────────────────────
+
+def place_plan(run, view):
+    margins = run.options[u"margins"]
+    sheet, title_block = run.new_sheet()
+    set_sheet_name(sheet, plan_sheet_name(view))
+
     if not Viewport.CanAddViewToSheet(doc, sheet.Id, view.Id):
         raise Stop(u"План «{0}» нельзя разместить на лист (уже размещён "
                    u"или не подходит по типу).".format(view.Name))
 
-    viewport = Viewport.Create(doc, sheet.Id, view.Id, XYZ.Zero)
-
-    if viewport_type is not None:
-        try:
-            viewport.ChangeTypeId(viewport_type)
-        except Exception:
-            pass
-
+    viewport = add_viewport(sheet, view, run.viewport_type)
     doc.Regenerate()
 
-    vx0, vy0, vx1, vy1 = outline_mm(viewport.GetBoxOutline())
-    need_w = vx1 - vx0
-    need_h = vy1 - vy0
+    rect = viewport_rect(viewport)
+    need_w = rect[2] - rect[0]
+    need_h = rect[3] - rect[1]
 
-    # Подбор формата: первый, куда влезло
     chosen = None
-    warning = u""
 
-    for fmt, mult, portrait in candidates:
-        apply_format(title_block, fmt, mult, portrait)
+    for candidate in run.candidates:
+        apply_format(title_block, *candidate)
         ax0, ay0, ax1, ay1 = work_area(title_block, sheet, margins)
 
         if need_w <= ax1 - ax0 and need_h <= ay1 - ay0:
-            chosen = (fmt, mult, portrait)
+            chosen = candidate
             break
 
     if chosen is None:
-        # Самый большой альбомный из перебранных — хоть куда-то положить
-        chosen = [item for item in candidates if not item[2]][-1]
+        chosen = largest_landscape(run.candidates)
         apply_format(title_block, *chosen)
-        warning = (u"план {0:.0f}×{1:.0f} мм не поместился ни на один "
-                   u"формат — оставлен {2}".format(
-                       need_w, need_h, describe_format(*chosen)))
+        run.warnings.append(
+            u"{0}: план {1:.0f}×{2:.0f} мм не поместился ни на один формат — "
+            u"оставлен {3}".format(sheet.SheetNumber, need_w, need_h,
+                                   describe_format(*chosen)))
 
-    # Центрирование в рабочей области — сдвигом на дельту центров
     ax0, ay0, ax1, ay1 = work_area(title_block, sheet, margins)
-    vx0, vy0, vx1, vy1 = outline_mm(viewport.GetBoxOutline())
+    move_viewport(viewport, rect,
+                  (ax0 + ax1 - need_w) / 2.0,
+                  (ay0 + ay1 - need_h) / 2.0)
 
-    dx = ((ax0 + ax1) - (vx0 + vx1)) / 2.0
-    dy = ((ay0 + ay1) - (vy0 + vy1)) / 2.0
+    run.created.append((sheet, describe_format(*chosen), 1))
 
-    ElementTransformUtils.MoveElement(
-        doc, viewport.Id, XYZ(dx / MM, dy / MM, 0.0))
 
-    return sheet, describe_format(*chosen), warning
+# ── Режим «Виды»: все на один лист, остаток — на следующий ─────────────────────
+
+def place_views_sheet(run, views):
+    u"""Один лист под первые виды из списка.
+
+    Возврат: сколько видов из начала списка обработано — легли на лист или
+    пропущены, потому что Revit не даёт поставить их на лист.
+    """
+    margins = run.options[u"margins"]
+    gap = run.options[u"gap"]
+    sheet, title_block = run.new_sheet()
+
+    usable = []
+    for view in views:
+        if Viewport.CanAddViewToSheet(doc, sheet.Id, view.Id):
+            usable.append(view)
+        else:
+            run.warnings.append(
+                u"«{0}»: Revit не даёт разместить вид на лист — пропущен".format(
+                    view.Name))
+            run.skipped.add(view.Id.IntegerValue)
+
+    if not usable:
+        doc.Delete(sheet.Id)
+        return 0
+
+    views = usable
+
+    viewports = []
+    for view in views:
+        viewports.append(add_viewport(sheet, view, run.viewport_type))
+
+    doc.Regenerate()
+
+    rects = [viewport_rect(viewport) for viewport in viewports]
+    sizes = [(r[2] - r[0], r[3] - r[1]) for r in rects]
+
+    chosen = None
+
+    for candidate in run.candidates:
+        apply_format(title_block, *candidate)
+        area = work_area(title_block, sheet, margins)
+        rows, placed = pp_place_layout.pack_rows(
+            sizes, area[2] - area[0], area[3] - area[1], gap)
+
+        if placed == len(views):
+            chosen = (candidate, area, rows, placed)
+            break
+
+    if chosen is None:
+        # Все не влезли никуда — заполняем стандартный А0, остальное дальше
+        candidate = OVERFLOW_FORMAT
+        apply_format(title_block, *candidate)
+        area = work_area(title_block, sheet, margins)
+        rows, placed = pp_place_layout.pack_rows(
+            sizes, area[2] - area[0], area[3] - area[1], gap)
+
+        if placed == 0:
+            # Первый вид больше А0 — пробуем удлинённые, иначе кладём как есть
+            w, h = sizes[0]
+            candidate = None
+
+            for item in run.candidates:
+                apply_format(title_block, *item)
+                area = work_area(title_block, sheet, margins)
+                if w <= area[2] - area[0] and h <= area[3] - area[1]:
+                    candidate = item
+                    break
+
+            if candidate is None:
+                candidate = largest_landscape(run.candidates)
+                apply_format(title_block, *candidate)
+                area = work_area(title_block, sheet, margins)
+                run.warnings.append(
+                    u"{0}: вид «{1}» ({2:.0f}×{3:.0f} мм) не поместился ни на "
+                    u"один формат — оставлен {4}".format(
+                        sheet.SheetNumber, views[0].Name, w, h,
+                        describe_format(*candidate)))
+
+            rows, placed = pp_place_layout.single_row(sizes), 1
+
+        chosen = (candidate, area, rows, placed)
+
+    candidate, area, rows, placed = chosen
+
+    # Не поместившиеся виды снимаем с этого листа — они уйдут на следующий
+    for viewport in viewports[placed:]:
+        doc.Delete(viewport.Id)
+
+    positions = pp_place_layout.place_rows(rows, sizes, area, gap)
+
+    for index in range(placed):
+        x0, y0 = positions[index]
+        move_viewport(viewports[index], rects[index], x0, y0)
+
+    set_sheet_name(sheet, views_sheet_name(run.options[u"prefix"],
+                                           views[:placed]))
+
+    run.created.append((sheet, describe_format(*candidate), placed))
+
+    for view in views[:placed]:
+        run.done.add(view.Id.IntegerValue)
+
+    return placed
+
+
+def place_views(run, views, bar):
+    remaining = list(views)
+    total = len(views)
+
+    # Виды без подрезки — предупреждаем, но не трогаем: подрезку решает человек
+    for view in remaining:
+        if view_warning(view):
+            run.warnings.append(
+                u"«{0}»: {1} — на листе вид размером со всю модель".format(
+                    view.Name, NO_CROP))
+
+    while remaining:
+        bar.update_progress(total - len(remaining), total)
+
+        placed = place_views_sheet(run, remaining)
+
+        remaining = [view for view in remaining
+                     if view.Id.IntegerValue not in run.done
+                     and view.Id.IntegerValue not in run.skipped]
+        left = len(remaining)
+
+        if placed and left:
+            sheet = run.created[-1][0]
+            run.warnings.append(
+                u"{0}: все виды не поместились даже на самый большой формат — "
+                u"{1} {2} перенесено на следующий лист".format(
+                    sheet.SheetNumber, left,
+                    plural(left, (u"вид", u"вида", u"видов"))))
+
+    bar.update_progress(total, total)
 
 
 # ── Запуск ─────────────────────────────────────────────────────────────────────
 
-def run():
-    plans = collect_plans()
+def run_tool():
+    lists = {
+        MODE_PLANS: collect_views(PLAN_TYPES, pp_sheet_picker.natural_key),
+        MODE_VIEWS: collect_views(OTHER_VIEW_TYPES,
+                                  pp_sheet_naming.view_order_key),
+    }
 
-    if not plans:
-        fail(u"В проекте нет планов, которые ещё не размещены на листах.")
+    if not lists[MODE_PLANS] and not lists[MODE_VIEWS]:
+        fail(u"В проекте нет планов и видов, которые ещё не размещены на листах.")
 
     section_param = pp_sheet_picker.get_section_param_name()
     sheets = pp_sheet_picker.collect_rows(doc, section_param)
@@ -497,25 +779,19 @@ def run():
 
     taken = set(row[u"number"] for row in sheets)
 
-    settings, defaults = load_defaults(plans, sheets)
+    settings, defaults = load_defaults(lists, sheets)
 
     options = pp_place_window.ask(
-        _HERE, plans, sheets, taken, sheet_name_for, defaults)
+        _HERE, lists, sheets, taken, name_for,
+        pp_sheet_naming.get_prefix_options(), defaults)
 
     if not options:
         return
 
     store_defaults(settings, options)
 
+    run = Run(options, section_param, taken)
     views = options[u"views"]
-    numbers = pp_place_window.allocate_numbers(
-        options[u"start"], options[u"suffix"], taken, len(views))
-
-    viewport_type = sample_viewport_type(options[u"sample"])
-    candidates = format_candidates(options[u"portrait"])
-
-    created = []
-    warnings = []
 
     transaction = Transaction(doc, TOOL_TITLE)
     transaction.Start()
@@ -523,54 +799,65 @@ def run():
     try:
         with forms.ProgressBar(title=TOOL_TITLE + u" — {value} из {max_value}",
                                cancellable=False) as bar:
-            for index, (view, number) in enumerate(zip(views, numbers)):
-                bar.update_progress(index, len(views))
-
-                sheet, fmt_text, warning = create_sheet(
-                    view, number, options, section_param, viewport_type,
-                    candidates)
-
-                created.append((sheet, fmt_text))
-
-                if warning:
-                    warnings.append(u"{0}: {1}".format(number, warning))
-
-            bar.update_progress(len(views), len(views))
+            if options[u"mode"] == MODE_PLANS:
+                for index, view in enumerate(views):
+                    bar.update_progress(index, len(views))
+                    place_plan(run, view)
+                bar.update_progress(len(views), len(views))
+            else:
+                place_views(run, views, bar)
 
         transaction.Commit()
     except Exception:
         transaction.RollBack()
         raise
 
-    lines = [u"Создано {0} {1}.".format(
-        len(created),
-        pp_place_window.plural(len(created), (u"лист", u"листа", u"листов")))]
-    lines.append(u"")
+    report(run)
 
-    for sheet, fmt_text in created:
-        lines.append(u"{0} — {1} — {2}".format(
-            sheet.SheetNumber, sheet.Name, fmt_text))
-
-    if warnings:
-        lines.append(u"")
-        lines.append(u"Проверьте:")
-        lines.extend(u"• " + line for line in warnings)
-
-    pp_wpf.show_report(
-        u"\n".join(lines),
-        title=u"Готово" if not warnings else u"Готово, есть замечания",
-        subtitle=TOOL_TITLE
-    )
-
-    if created:
+    if run.created:
         try:
-            uidoc.ActiveView = created[0][0]
+            uidoc.ActiveView = run.created[0][0]
         except Exception:
             pass
 
 
+def report(run):
+    count = len(run.created)
+    lines = [u"Создано {0} {1}.".format(
+        count, plural(count, (u"лист", u"листа", u"листов")))]
+
+    if run.options[u"mode"] == MODE_VIEWS and count > 1:
+        lines.append(u"")
+        lines.append(u"ВНИМАНИЕ: виды не поместились на один лист и разнесены "
+                     u"на {0} {1}.".format(
+                         count, plural(count, (u"лист", u"листа", u"листов"))))
+
+    lines.append(u"")
+
+    for sheet, fmt_text, placed in run.created:
+        line = u"{0} — {1} — {2}".format(sheet.SheetNumber, sheet.Name, fmt_text)
+
+        if run.options[u"mode"] == MODE_VIEWS:
+            line = u"{0} — {1} {2}".format(
+                line, placed, plural(placed, (u"вид", u"вида", u"видов")))
+
+        lines.append(line)
+
+    if run.warnings:
+        lines.append(u"")
+        lines.append(u"Проверьте:")
+        lines.extend(u"• " + line for line in run.warnings)
+
+    pp_wpf.show_report(
+        u"\n".join(lines),
+        title=u"Готово" if not run.warnings else u"Готово, есть замечания",
+        subtitle=TOOL_TITLE,
+        width=620
+    )
+
+
 try:
-    run()
+    run_tool()
 
 except Stop as ex:
     pp_wpf.show_report(
