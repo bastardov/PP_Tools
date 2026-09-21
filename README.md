@@ -22,8 +22,11 @@
 
 ```cmd
 cd %APPDATA%\pyRevit-Master\extensions
-git clone https://github.com/<ваш-аккаунт>/PP_Tools.extension.git PP_Tools.extension
+git clone https://github.com/bastardov/PP_Tools.git PP_Tools.extension
 ```
+
+Имя папки `PP_Tools.extension` в конце команды обязательно: pyRevit ищет расширения
+только в папках с таким окончанием.
 
 **Вариант 2 — скачать архивом:** кнопка `Code → Download ZIP`, распаковать в
 `%APPDATA%\pyRevit-Master\extensions\` так, чтобы папка называлась именно
