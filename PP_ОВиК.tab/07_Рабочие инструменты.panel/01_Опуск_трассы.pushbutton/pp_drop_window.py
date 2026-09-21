@@ -5,7 +5,10 @@ u"""Окно параметров инструмента «Опуск / Подъ
 
 * «Опуск» и «Подъем» — смещение на заданную величину по вертикали;
 * «По отметке» — участок встаёт на отметку от выбранного уровня модели.
-  Опуск это или подъем, скрипт решает сам по знаку разницы отметок.
+  Опуск это или подъем, скрипт решает сам по знаку разницы отметок;
+* «Стояк» — трасса обрезается в точке разрыва и уходит вертикально до
+  заданной отметки. Отвод сверху и горизонталь за ним не строятся,
+  поэтому угол и перенос ветки в этом режиме не нужны.
 
 Окно модальное: собирает режим, угол и величину (или уровень с отметкой),
 закрывается и отдаёт значения скрипту. Работы с моделью здесь нет, поэтому
@@ -28,6 +31,7 @@ MAX_ANGLE = 90.0
 MODE_DOWN = u"Опуск"
 MODE_UP = u"Подъем"
 MODE_LEVEL = u"Отметка"
+MODE_RISER = u"Стояк"
 
 REF_BOTTOM = u"низ"
 REF_MIDDLE = u"середина"
@@ -70,13 +74,13 @@ def parse_number(text):
 class DropRouteVM(pp_wpf.Notifier):
 
     def __init__(self, mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
-                 multi=False, move_chain=False):
+                 multi=False, move_chain=False, riser_elev_mm=None):
         pp_wpf.Notifier.__init__(self)
 
         self._multi = bool(multi)
         self._move_chain = bool(move_chain)
 
-        self._mode = mode if mode in (MODE_DOWN, MODE_UP, MODE_LEVEL) else MODE_DOWN
+        self._mode = mode if mode in (MODE_DOWN, MODE_UP, MODE_LEVEL, MODE_RISER) else MODE_DOWN
 
         if angle in ANGLE_PRESETS:
             self._angle_preset = angle
@@ -97,6 +101,13 @@ class DropRouteVM(pp_wpf.Notifier):
             self._elev_text = u""
         else:
             self._elev_text = format_mm(elev_mm)
+
+        # У стояка отметка означает торец, а не низ/верх горизонтали —
+        # значение храним отдельно, чтобы режимы не перетирали друг друга
+        if riser_elev_mm is None:
+            self._riser_elev_text = u""
+        else:
+            self._riser_elev_text = format_mm(riser_elev_mm)
 
         self._status = u""
         self._status_error = False
@@ -126,8 +137,37 @@ class DropRouteVM(pp_wpf.Notifier):
         return self._mode == MODE_LEVEL
 
     @property
+    def IsRiser(self):
+        return self._mode == MODE_RISER
+
+    @property
+    def NeedsLevel(self):
+        u"""Блок «уровень + отметка» нужен и «По отметке», и «Стояку»."""
+        return self.IsByLevel or self.IsRiser
+
+    @property
     def IsByOffset(self):
-        return not self.IsByLevel
+        return not self.NeedsLevel
+
+    @property
+    def ShowAngle(self):
+        u"""У стояка угол всегда 90° — строка с углами только мешает."""
+        return not self.IsRiser
+
+    @property
+    def ShowChain(self):
+        u"""Переносить нечего: продолжение трассы за точкой разрыва обрезается."""
+        return not self.IsRiser
+
+    @property
+    def Lead(self):
+        if self.IsRiser:
+            return (u"Трасса обрезается в указанной точке и уходит вертикально "
+                    u"до заданной отметки. Отвод сверху и горизонтальный "
+                    u"участок за ним не строятся.")
+
+        return (u"Участок разрывается в указанной точке, часть трассы "
+                u"переносится по высоте и соединяется наклонной вставкой.")
 
     @property
     def IsCustomAngle(self):
@@ -135,6 +175,9 @@ class DropRouteVM(pp_wpf.Notifier):
 
     @property
     def RunLabel(self):
+        if self.IsRiser:
+            return u"Построить"
+
         if self.IsByLevel:
             return u"Переместить"
 
@@ -157,6 +200,9 @@ class DropRouteVM(pp_wpf.Notifier):
     def IsValid(self):
         if self._status_error:
             return False
+
+        if self.IsRiser:
+            return self.level is not None and self.riser_elev_mm is not None
 
         if self.angle is None:
             return False
@@ -187,6 +233,12 @@ class DropRouteVM(pp_wpf.Notifier):
         if level is None:
             return u"В модели не найдено ни одного уровня."
 
+        if self.IsRiser:
+            return (
+                u"Отметка считается от «{}». Вверх это или вниз, инструмент "
+                u"определит сам по разнице с текущей отметкой трассы."
+            ).format(level.get(u"key"))
+
         return (
             u"Отметка считается от «{}». Величину смещения и горизонтальный "
             u"отступ инструмент посчитает сам после выбора участка."
@@ -194,6 +246,16 @@ class DropRouteVM(pp_wpf.Notifier):
 
     @property
     def OptionsHint(self):
+        if self.IsRiser:
+            hint = (u"Продолжение трассы за точкой разрыва обрезается. Если к "
+                    u"нему что-то подключено — отвод, участок, оборудование — "
+                    u"инструмент откажется и ничего не удалит.")
+
+            if self._multi:
+                hint += u" Точки укажете один раз на любом из выбранных участков."
+
+            return hint
+
         if self._move_chain:
             hint = (u"Вся ветка за точкой разрыва уедет вместе с участком — "
                     u"вместе с решётками и оборудованием.")
@@ -251,6 +313,11 @@ class DropRouteVM(pp_wpf.Notifier):
         return parse_number(self._elev_text)
 
     @property
+    def riser_elev_mm(self):
+        u"""Отметка торца стояка: ноль и минус — нормальные значения."""
+        return parse_number(self._riser_elev_text)
+
+    @property
     def horizontal_offset_mm(self):
         value = self.value_mm
         angle = self.angle
@@ -268,7 +335,9 @@ class DropRouteVM(pp_wpf.Notifier):
     def set_mode(self, mode):
         self._mode = mode
         self.notify(
-            u"IsDown", u"IsUp", u"IsByLevel", u"IsByOffset", u"RunLabel"
+            u"IsDown", u"IsUp", u"IsByLevel", u"IsRiser", u"NeedsLevel",
+            u"IsByOffset", u"ShowAngle", u"ShowChain", u"Lead", u"RunLabel",
+            u"OptionsHint"
         )
         self.revalidate()
 
@@ -294,6 +363,10 @@ class DropRouteVM(pp_wpf.Notifier):
         self._elev_text = text
         self.revalidate()
 
+    def set_riser_elevation(self, text):
+        self._riser_elev_text = text
+        self.revalidate()
+
     def set_multi(self, value):
         self._multi = bool(value)
         self.notify(u"OptionsHint")
@@ -304,7 +377,9 @@ class DropRouteVM(pp_wpf.Notifier):
 
     def revalidate(self):
         u"""Единственное место, где решается, готово окно к запуску или нет."""
-        if self.IsByLevel:
+        if self.IsRiser:
+            self._revalidate_riser()
+        elif self.IsByLevel:
             self._revalidate_level()
         else:
             self._revalidate_offset()
@@ -355,6 +430,25 @@ class DropRouteVM(pp_wpf.Notifier):
                 False
             )
 
+    def _revalidate_riser(self):
+        if self.level is None:
+            self._set_status(u"Выберите уровень.", True)
+
+        elif self.riser_elev_mm is None:
+            self._set_status(
+                u"Отметка конца: введите число, например 3300 или -150.",
+                True
+            )
+
+        else:
+            self._set_status(
+                u"Стояк до отм. {} мм от «{}».".format(
+                    format_mm(self.riser_elev_mm),
+                    self.level.get(u"key")
+                ),
+                False
+            )
+
     def _angle_error(self):
         return u"Угол: введите число от {} до {} градусов.".format(
             format_mm(MIN_ANGLE), format_mm(MAX_ANGLE)
@@ -379,6 +473,7 @@ class DropRouteVM(pp_wpf.Notifier):
             u"elev_mm": self.elev_mm,
             u"multi": self._multi,
             u"move_chain": self._move_chain,
+            u"riser_elev_mm": self.riser_elev_mm,
         }
 
 
@@ -389,12 +484,12 @@ class DropRouteVM(pp_wpf.Notifier):
 class DropRouteWindow(object):
 
     def __init__(self, mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
-                 multi=False, move_chain=False):
+                 multi=False, move_chain=False, riser_elev_mm=None):
         xaml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), u"ui.xaml")
 
         self.window = pp_wpf.load_window_file(xaml_path)
         self.vm = DropRouteVM(mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
-                              multi, move_chain)
+                              multi, move_chain, riser_elev_mm)
         self.window.DataContext = self.vm
 
         self.accepted = False
@@ -416,6 +511,7 @@ class DropRouteWindow(object):
         find("ChipDown").IsChecked = self.vm.IsDown
         find("ChipUp").IsChecked = self.vm.IsUp
         find("ChipLevel").IsChecked = self.vm.IsByLevel
+        find("ChipRiser").IsChecked = self.vm.IsRiser
 
         for angle, chip in self._angle_chips():
             chip.IsChecked = (self.vm._angle_preset == angle)
@@ -424,6 +520,7 @@ class DropRouteWindow(object):
 
         find("TxtCustomAngle").Text = self.vm._custom_angle_text
         find("TxtValue").Text = self.vm._value_text
+        find("TxtElevRiser").Text = self.vm._riser_elev_text
 
         find("ChkMulti").IsChecked = self.vm._multi
         find("ChkMoveChain").IsChecked = self.vm._move_chain
@@ -484,9 +581,14 @@ class DropRouteWindow(object):
         def on_level(sender, args):
             self.vm.set_mode(MODE_LEVEL)
 
+        @guard
+        def on_riser(sender, args):
+            self.vm.set_mode(MODE_RISER)
+
         find("ChipDown").Checked += on_down
         find("ChipUp").Checked += on_up
         find("ChipLevel").Checked += on_level
+        find("ChipRiser").Checked += on_riser
 
         # Фабрика обработчиков: общий цикл с lambda отдал бы всем чипсам
         # последнее значение угла.
@@ -517,6 +619,12 @@ class DropRouteWindow(object):
             self.vm.set_value(sender.Text)
 
         find("TxtValue").TextChanged += on_value
+
+        @guard
+        def on_riser_elev(sender, args):
+            self.vm.set_riser_elevation(sender.Text)
+
+        find("TxtElevRiser").TextChanged += on_riser_elev
 
         @guard
         def on_level_changed(sender, args):
@@ -613,8 +721,9 @@ class DropRouteWindow(object):
 
 
 def ask_settings(mode, angle, value_mm, levels=None, level_key=None,
-                 ref_kind=None, elev_mm=None, multi=False, move_chain=False):
+                 ref_kind=None, elev_mm=None, multi=False, move_chain=False,
+                 riser_elev_mm=None):
     return DropRouteWindow(
         mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
-        multi, move_chain
+        multi, move_chain, riser_elev_mm
     ).show()

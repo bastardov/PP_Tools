@@ -36,7 +36,7 @@
     <TextBlock Grid.Row="0" Style="{StaticResource H1}" Text="Опуск / Подъем трассы"/>
 
     <TextBlock Grid.Row="1" Style="{StaticResource Subtitle}" Margin="0,4,0,0"
-               Text="Участок разрывается в указанной точке, часть трассы переносится по высоте и соединяется наклонной вставкой."/>
+               TextWrapping="Wrap" Text="{Binding Lead}"/>
 
     <!-- ===== Схема: наглядный профиль результата ===== -->
     <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,14,0,0" Padding="0,12,0,12">
@@ -77,6 +77,22 @@
           <TextBlock Canvas.Left="238" Canvas.Top="18" Style="{StaticResource Caption}" Text="отметка"/>
         </Canvas>
 
+        <!-- Стояк: трасса обрывается вертикалью, сверху ничего не строится -->
+        <Canvas x:Name="DiagramRiser" Width="300" Height="62"
+                Visibility="{Binding IsRiser, Converter={StaticResource BoolVis}}">
+          <TextBlock Canvas.Left="10" Canvas.Top="0" Style="{StaticResource Caption}" Text="уровень"/>
+          <Path Data="M 10,20 L 290,20" Stroke="{StaticResource Muted}" StrokeThickness="1"
+                StrokeDashArray="4 3"/>
+          <Path Data="M 10,52 L 150,52" Stroke="{StaticResource Accent}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+          <Path Data="M 150,52 L 150,34" Stroke="{StaticResource Accent}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+          <Path Data="M 138,33 L 162,33" Stroke="{StaticResource Hot}" StrokeThickness="1.5"/>
+          <Path Data="M 210,20 L 210,33" Stroke="{StaticResource Hot}" StrokeThickness="1.5"/>
+          <TextBlock Canvas.Left="216" Canvas.Top="15" Style="{StaticResource Caption}" Text="отметка конца"/>
+          <Ellipse Canvas.Left="145" Canvas.Top="47" Width="10" Height="10"
+                   Fill="{StaticResource Surface}" Stroke="{StaticResource Hot}" StrokeThickness="1.8"/>
+          <TextBlock Canvas.Left="162" Canvas.Top="45" Style="{StaticResource Caption}" Text="точка разрыва"/>
+        </Canvas>
+
       </Grid>
     </Border>
 
@@ -93,11 +109,15 @@
         <RadioButton x:Name="ChipLevel" Style="{StaticResource RadioButton.Chip}"
                      GroupName="Direction" Content="По отметке" MinWidth="108"
                      ToolTip="Часть трассы встаёт на заданную отметку от выбранного уровня. Опуск это или подъем, инструмент решит сам"/>
+        <RadioButton x:Name="ChipRiser" Style="{StaticResource RadioButton.Chip}"
+                     GroupName="Direction" Content="Стояк" MinWidth="88"
+                     ToolTip="Трасса обрезается в указанной точке и уходит вертикально до заданной отметки. Отвод сверху и продолжение по горизонтали не строятся"/>
       </WrapPanel>
     </StackPanel>
 
     <!-- ===== Угол ===== -->
-    <StackPanel Grid.Row="4" Margin="0,14,0,0">
+    <StackPanel Grid.Row="4" Margin="0,14,0,0"
+                Visibility="{Binding ShowAngle, Converter={StaticResource BoolVis}}">
       <TextBlock Style="{StaticResource FieldLabel}" Text="УГОЛ ОТ ГОРИЗОНТАЛИ"/>
       <WrapPanel>
         <RadioButton x:Name="Chip30" Style="{StaticResource RadioButton.Chip}" GroupName="Angle" Content="30°"/>
@@ -130,11 +150,14 @@
 
     <!-- ===== Отметка от уровня ===== -->
     <StackPanel Grid.Row="6" Margin="0,14,0,0"
-                Visibility="{Binding IsByLevel, Converter={StaticResource BoolVis}}">
+                Visibility="{Binding NeedsLevel, Converter={StaticResource BoolVis}}">
 
       <TextBlock Style="{StaticResource FieldLabel}" Text="УРОВЕНЬ"/>
       <ComboBox x:Name="CmbLevel" Style="{StaticResource PP.ComboBox}" Margin="0,6,0,0"
                 ToolTip="Уровень модели, от которого отсчитывается отметка"/>
+
+      <!-- Три поля: отметка горизонтального участка -->
+      <StackPanel Visibility="{Binding IsByLevel, Converter={StaticResource BoolVis}}">
 
       <TextBlock Style="{StaticResource FieldLabel}" Text="ОТМЕТКА ОТ УРОВНЯ, ММ" Margin="0,14,0,0"/>
       <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0"
@@ -169,6 +192,24 @@
         </StackPanel>
       </Grid>
 
+      </StackPanel>
+
+      <!-- Одно поле: у вертикали торец плоский, низ = середина = верх -->
+      <StackPanel Visibility="{Binding IsRiser, Converter={StaticResource BoolVis}}">
+
+        <TextBlock Style="{StaticResource FieldLabel}" Text="ОТМЕТКА КОНЦА СТОЯКА, ММ" Margin="0,14,0,0"/>
+        <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
+                   Text="Торец стояка встанет на эту отметку. Ниже уровня — со знаком минус."/>
+
+        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+          <TextBox x:Name="TxtElevRiser" Style="{StaticResource TextBox.Field}" Width="120"
+                   Tag="напр. 3300"
+                   ToolTip="Отметка торца стояка от выбранного уровня, в миллиметрах"/>
+          <TextBlock Style="{StaticResource Caption}" Text="мм" Margin="8,0,0,0" VerticalAlignment="Center"/>
+        </StackPanel>
+
+      </StackPanel>
+
       <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0"
                  Text="{Binding LevelHint}" TextWrapping="Wrap"/>
     </StackPanel>
@@ -182,6 +223,7 @@
                 ToolTip="Точка разрыва и точка направления указываются один раз и переносятся на все выбранные участки по перпендикуляру. Подходит для параллельных трасс. Если участки уже выделены в модели, окно возьмёт их"/>
 
       <CheckBox x:Name="ChkMoveChain" Style="{StaticResource PP.CheckBox}" Margin="0,8,0,0"
+                Visibility="{Binding ShowChain, Converter={StaticResource BoolVis}}"
                 Content="Переносить всё, что дальше по трассе"
                 ToolTip="Снято (обычный опуск): вместе с трассой едет горизонтальная часть до первого вертикального участка, сам стояк подрезается по высоте, а всё, что за ним — решётки, подводки — остаётся на своих отметках. Поставлено: вся ветка за точкой разрыва уезжает целиком"/>
 

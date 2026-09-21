@@ -118,6 +118,12 @@ def load_settings():
         saved[u"elev_mm"] = None
 
     try:
+        riser_elev = my_config.get_option("riser_elev_mm", None)
+        saved[u"riser_elev_mm"] = None if riser_elev is None else float(riser_elev)
+    except:
+        saved[u"riser_elev_mm"] = None
+
+    try:
         saved[u"multi"] = bool(my_config.get_option("multi", False))
     except:
         saved[u"multi"] = False
@@ -147,6 +153,9 @@ def save_settings(result):
 
         if result[u"elev_mm"] is not None:
             my_config.elev_mm = result[u"elev_mm"]
+
+        if result.get(u"riser_elev_mm") is not None:
+            my_config.riser_elev_mm = result[u"riser_elev_mm"]
 
         my_config.multi = result[u"multi"]
         my_config.move_chain = result[u"move_chain"]
@@ -339,7 +348,8 @@ def ask_move_settings():
         saved[u"ref_kind"],
         saved[u"elev_mm"],
         saved[u"multi"],
-        saved[u"move_chain"]
+        saved[u"move_chain"],
+        saved[u"riser_elev_mm"]
     )
 
     if result is None:
@@ -1127,6 +1137,155 @@ def restore_external_connections(connection_data, new_elements,
     return restored, skipped
 
 
+def analyze_riser(mep, ctx, start, end, split, axis_unit, t_split,
+                  move_after_split, warnings):
+    u"""Режим «Стояк»: трасса обрезается и уходит вертикально до отметки.
+
+    Отвод сверху и горизонталь за ним не строятся. Хвост за точкой разрыва
+    исчезает вместе с исходным участком, поэтому если к нему что-то
+    подключено — отказ: чужие элементы инструмент не сносит.
+    """
+    level = ctx[u"level"]
+
+    # У вертикали торец плоский: низ = середина = верх, половину сечения
+    # добавлять не к чему
+    target_z = level[u"elev_ft"] + ctx[u"riser_elev_mm"] * MM_TO_FT
+    move_ft_signed = target_z - split.Z
+
+    if abs(move_ft_signed) < MIN_SEGMENT_FT:
+        raise Skip(
+            u"Стояк короче {} мм: трасса в точке разрыва уже на отм. {} мм "
+            u"от «{}».".format(
+                fmt(MIN_SEGMENT_MM),
+                fmt(round((split.Z - level[u"elev_ft"]) / MM_TO_FT, 1)),
+                level[u"key"]
+            )
+        )
+
+    if abs(start.Z - end.Z) > 0.5 * MM_TO_FT:
+        warnings.append(
+            u"{}: участок наклонный, стояк построен от точки разрыва.".format(
+                element_label(mep)
+            )
+        )
+
+    # --- что подключено к обрезаемой стороне ---
+    keep_connections = []
+
+    for item in remember_external_connections(mep):
+        t = project_param_raw(item["origin"], start, end)
+
+        if t is None:
+            keep_connections.append(item)
+            continue
+
+        if move_after_split:
+            on_cut_side = t > t_split - 0.000001
+        else:
+            on_cut_side = t < t_split + 0.000001
+
+        if not on_cut_side:
+            keep_connections.append(item)
+            continue
+
+        other = doc.GetElement(item["owner_id"])
+
+        raise Skip(
+            u"За точкой разрыва трасса продолжается: {}. Удалите продолжение "
+            u"сами — инструмент чужие элементы не сносит.".format(
+                element_label(other) if other is not None else u"подключенный элемент"
+            )
+        )
+
+    riser_end = XYZ(split.X, split.Y, target_z)
+
+    bend_axis = normalize(cross(axis_unit, XYZ.BasisZ))
+    source_axes = profile_axes(mep, split)
+
+    if source_axes is None or bend_axis is None:
+        profile_use_x = None
+    else:
+        profile_use_x = abs(dot(source_axes[0], XYZ.BasisZ)) < abs(dot(source_axes[1], XYZ.BasisZ))
+
+    if move_after_split:
+        static_start, static_end = start, split
+    else:
+        static_start, static_end = split, end
+
+    return {
+        u"mep": mep,
+        u"label": element_label(mep),
+        u"riser": True,
+        u"start": start,
+        u"end": end,
+        u"split": split,
+        u"move_after_split": move_after_split,
+        u"static_start": static_start,
+        u"static_end": static_end,
+        u"riser_end": riser_end,
+        u"move_vec": XYZ(0, 0, move_ft_signed),
+        u"move_mm": abs(move_ft_signed) / MM_TO_FT,
+        u"direction": u"Опуск" if move_ft_signed < 0 else u"Подъем",
+        u"horizontal_offset_mm": 0.0,
+        u"bend_axis": bend_axis,
+        u"profile_use_x": profile_use_x,
+        u"external_connections": keep_connections,
+        u"move_chain_ids": None,
+        u"absorbers": [],
+        u"warnings": warnings,
+    }
+
+
+def apply_riser_plan(plan):
+    u"""Остаётся горизонталь до точки разрыва плюс вертикаль до отметки."""
+    mep = plan[u"mep"]
+    split = plan[u"split"]
+    riser_end = plan[u"riser_end"]
+
+    warnings = list(plan[u"warnings"])
+
+    static_el, err1 = create_same_mep(mep, plan[u"static_start"], plan[u"static_end"])
+
+    if static_el is None:
+        raise Exception(u"Не создан горизонтальный участок: {}".format(err1))
+
+    riser_el, err2 = create_same_mep(mep, split, riser_end)
+
+    if riser_el is None:
+        raise Exception(u"Не создан стояк: {}".format(err2))
+
+    new_elements = [static_el, riser_el]
+
+    align_profile(static_el, plan[u"static_start"], plan[u"static_end"],
+                  plan[u"profile_use_x"], plan[u"bend_axis"])
+    align_profile(riser_el, split, riser_end,
+                  plan[u"profile_use_x"], plan[u"bend_axis"])
+
+    ok, err = connect_with_elbow(static_el, split, riser_el, split)
+
+    if not ok:
+        warnings.append(u"{}: не создан отвод: {}".format(plan[u"label"], err))
+
+    # Вместе с исходным участком уходит и его часть за точкой разрыва
+    doc.Delete(mep.Id)
+
+    restored, restore_skipped = restore_external_connections(
+        plan[u"external_connections"],
+        new_elements
+    )
+
+    for item in restore_skipped:
+        warnings.append(u"{}: {}".format(plan[u"label"], item))
+
+    return {
+        u"new_count": len(new_elements),
+        u"moved_count": 0,
+        u"restored": len(restored),
+        u"riser_labels": [],
+        u"warnings": warnings,
+    }
+
+
 def analyze_element(mep, p1, p2, ctx, blocked_ids):
     u"""Геометрия одного участка: что и куда двигать. Ошибки — через Skip.
 
@@ -1170,6 +1329,27 @@ def analyze_element(mep, p1, p2, ctx, blocked_ids):
     len_to_start = start.DistanceTo(split)
     len_to_end = split.DistanceTo(end)
 
+    move_after_split = t_dir >= t_split
+
+    if ctx[u"riser"]:
+        # Обрезаемой стороны не остаётся совсем, поэтому её длина не важна:
+        # точку можно ставить хоть у самого конца участка
+        kept_len = len_to_start if move_after_split else len_to_end
+
+        if kept_len < MIN_SEGMENT_FT:
+            raise Skip(
+                u"Со стороны, которая остаётся, меньше {} мм трассы. "
+                u"Точка направления должна смотреть на ту часть, "
+                u"которая обрезается.".format(
+                    fmt(MIN_SEGMENT_MM)
+                )
+            )
+
+        return analyze_riser(
+            mep, ctx, start, end, split, axis_unit, t_split,
+            move_after_split, warnings
+        )
+
     if total_len < MIN_SEGMENT_FT * 2:
         raise Skip(u"Участок слишком короткий для изменения отметки.")
 
@@ -1187,7 +1367,6 @@ def analyze_element(mep, p1, p2, ctx, blocked_ids):
             )
         )
 
-    move_after_split = t_dir >= t_split
     source_id = mep.Id.IntegerValue
 
     angle_deg = ctx[u"angle_deg"]
@@ -1371,6 +1550,9 @@ def analyze_element(mep, p1, p2, ctx, blocked_ids):
 
 def apply_plan(plan):
     u"""Перестройка одного участка. Вызывать внутри открытой транзакции."""
+    if plan.get(u"riser"):
+        return apply_riser_plan(plan)
+
     mep = plan[u"mep"]
 
     start = plan[u"start"]
@@ -1561,19 +1743,27 @@ try:
     move_chain = settings[u"move_chain"]
 
     by_level = (mode == u"Отметка")
+    riser = (mode == u"Стояк")
+
+    if riser:
+        # Угол и перенос ветки в этом режиме смысла не имеют
+        angle_deg = 90.0
+        move_chain = False
 
     ctx = {
         u"mode": mode,
         u"angle_deg": angle_deg,
         u"by_level": by_level,
+        u"riser": riser,
         u"value_mm": settings[u"value_mm"],
         u"ref_kind": settings[u"ref_kind"],
         u"elev_mm": settings[u"elev_mm"],
+        u"riser_elev_mm": settings.get(u"riser_elev_mm"),
         u"level": None,
         u"move_chain": move_chain,
     }
 
-    if by_level:
+    if by_level or riser:
         for item in settings[u"levels"]:
             if item[u"key"] == settings[u"level_key"]:
                 ctx[u"level"] = item
@@ -1582,7 +1772,10 @@ try:
         if ctx[u"level"] is None:
             fail(u"Уровень «{}» в модели не найден.".format(settings[u"level_key"]))
 
-        if settings[u"elev_mm"] is None:
+        if riser:
+            if ctx[u"riser_elev_mm"] is None:
+                fail(u"Не задана отметка конца стояка.")
+        elif settings[u"elev_mm"] is None:
             fail(u"Не задана отметка от уровня.")
     else:
         if ctx[u"value_mm"] is None or ctx[u"value_mm"] <= 0:
@@ -1602,7 +1795,10 @@ try:
         except:
             pass
 
-    if len(targets) > 1:
+    if riser:
+        point_hint = u"Укажите точку, где трасса уходит в стояк"
+        dir_hint = u"Укажите точку со стороны, которая обрезается"
+    elif len(targets) > 1:
         point_hint = u"Укажите точку разрыва на любом из выбранных участков"
         dir_hint = u"Укажите точку направления на том же участке"
     else:
@@ -1695,33 +1891,52 @@ try:
 
     msg = u""
 
-    if by_level:
-        msg += u"Отметка {}: {} мм от «{}»\n".format(
-            settings[u"ref_kind"],
-            fmt(settings[u"elev_mm"]),
+    if riser:
+        msg += u"Отметка конца стояка: {} мм от «{}»\n".format(
+            fmt(ctx[u"riser_elev_mm"]),
             ctx[u"level"][u"key"]
         )
+    else:
+        if by_level:
+            msg += u"Отметка {}: {} мм от «{}»\n".format(
+                settings[u"ref_kind"],
+                fmt(settings[u"elev_mm"]),
+                ctx[u"level"][u"key"]
+            )
 
-    msg += u"Угол: {}°\n".format(fmt(angle_deg))
+        msg += u"Угол: {}°\n".format(fmt(angle_deg))
 
     if len(done) == 1:
         one = done[0]
 
-        msg += u"Направление: {}\nВеличина: {} мм\nГоризонтальный отступ: {} мм\n".format(
-            one[u"direction"].lower(),
-            fmt(round(one[u"move_mm"], 1)),
-            fmt(round(one[u"horizontal_offset_mm"], 1))
-        )
+        if riser:
+            msg += u"Направление: {}\nВысота стояка: {} мм\n".format(
+                one[u"direction"].lower(),
+                fmt(round(one[u"move_mm"], 1))
+            )
+        else:
+            msg += u"Направление: {}\nВеличина: {} мм\nГоризонтальный отступ: {} мм\n".format(
+                one[u"direction"].lower(),
+                fmt(round(one[u"move_mm"], 1)),
+                fmt(round(one[u"horizontal_offset_mm"], 1))
+            )
     else:
         msg += u"\nУчастки:\n"
 
         for s in done:
-            msg += u"— {}: {} на {} мм, отступ {} мм\n".format(
-                s[u"label"],
-                s[u"direction"].lower(),
-                fmt(round(s[u"move_mm"], 1)),
-                fmt(round(s[u"horizontal_offset_mm"], 1))
-            )
+            if riser:
+                msg += u"— {}: стояк {} на {} мм\n".format(
+                    s[u"label"],
+                    s[u"direction"].lower(),
+                    fmt(round(s[u"move_mm"], 1))
+                )
+            else:
+                msg += u"— {}: {} на {} мм, отступ {} мм\n".format(
+                    s[u"label"],
+                    s[u"direction"].lower(),
+                    fmt(round(s[u"move_mm"], 1)),
+                    fmt(round(s[u"horizontal_offset_mm"], 1))
+                )
 
         msg += u"\n"
 
@@ -1730,7 +1945,9 @@ try:
         total_restored
     )
 
-    if move_chain:
+    if riser:
+        msg += u"\nПродолжение трассы за точкой разрыва обрезано."
+    elif move_chain:
         msg += u"\nПеремещено связанных элементов: {}".format(total_moved)
     else:
         msg += u"\nПереехало вместе с трассой: {} (горизонталь и отводы)".format(
@@ -1757,8 +1974,12 @@ try:
 
     if len(done) == 1:
         one = done[0]
-        done_verb = u"Опущено" if one[u"direction"] == u"Опуск" else u"Поднято"
-        title = u"{} на {} мм".format(done_verb, fmt(round(one[u"move_mm"], 1)))
+
+        if riser:
+            title = u"Стояк {} мм".format(fmt(round(one[u"move_mm"], 1)))
+        else:
+            done_verb = u"Опущено" if one[u"direction"] == u"Опуск" else u"Поднято"
+            title = u"{} на {} мм".format(done_verb, fmt(round(one[u"move_mm"], 1)))
     else:
         title = u"Обработано участков: {}".format(len(done))
 
