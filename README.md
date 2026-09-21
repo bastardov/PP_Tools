@@ -99,6 +99,11 @@ git pull
 списки с галочками, выбор листов и параметров, библиотеки проверок
 (`lib/spec_checks/`, `lib/model_checks/`, `lib/heatloss_checks/`).
 
+## Версии
+
+История изменений — в [CHANGELOG.md](CHANGELOG.md). Стабильные состояния с архивами — в разделе
+[Releases](https://github.com/bastardov/PP_Tools/releases); в ветке `main` всегда свежая разработка.
+
 ## Вклад и обратная связь
 
 Ошибки и идеи — через Issues. Pull request'ы приветствуются; перед правками
