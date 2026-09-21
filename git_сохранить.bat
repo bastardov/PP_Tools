@@ -32,9 +32,7 @@ git add -A
 git commit -m "%MSG%"
 if errorlevel 1 (
     echo.
-    echo Сохранять было нечего либо коммит не прошёл.
-    pause
-    exit /b 0
+    echo Новых правок нет. Проверяю, всё ли отправлено на GitHub.
 )
 
 echo.
@@ -43,8 +41,8 @@ git log --oneline -1
 git remote get-url origin >nul 2>nul
 if not errorlevel 1 (
     echo.
-    echo Отправляю на сервер...
-    git push
+    echo Отправляю на GitHub (коммиты и метки версий)...
+    git push --follow-tags
     if errorlevel 1 echo [Внимание] Отправка не прошла. Локально всё сохранено, отправите позже.
 )
 
