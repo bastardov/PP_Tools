@@ -74,11 +74,13 @@ def parse_number(text):
 class DropRouteVM(pp_wpf.Notifier):
 
     def __init__(self, mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
-                 multi=False, move_chain=False, riser_elev_mm=None):
+                 multi=False, move_chain=False, riser_elev_mm=None,
+                 riser_cut=True):
         pp_wpf.Notifier.__init__(self)
 
         self._multi = bool(multi)
         self._move_chain = bool(move_chain)
+        self._riser_cut = bool(riser_cut)
 
         self._mode = mode if mode in (MODE_DOWN, MODE_UP, MODE_LEVEL, MODE_RISER) else MODE_DOWN
 
@@ -247,9 +249,13 @@ class DropRouteVM(pp_wpf.Notifier):
     @property
     def OptionsHint(self):
         if self.IsRiser:
-            hint = (u"Продолжение трассы за точкой разрыва обрезается. Если к "
-                    u"нему что-то подключено — отвод, участок, оборудование — "
-                    u"инструмент откажется и ничего не удалит.")
+            if self._riser_cut:
+                hint = (u"Всё, что дальше по трассе за точкой разрыва — "
+                        u"участки, отводы, решётки — будет удалено. Отмена "
+                        u"в Revit возвращает всё одним шагом.")
+            else:
+                hint = (u"Если за точкой разрыва трасса продолжается, "
+                        u"инструмент откажется и ничего не удалит.")
 
             if self._multi:
                 hint += u" Точки укажете один раз на любом из выбранных участков."
@@ -367,6 +373,10 @@ class DropRouteVM(pp_wpf.Notifier):
         self._riser_elev_text = text
         self.revalidate()
 
+    def set_riser_cut(self, value):
+        self._riser_cut = bool(value)
+        self.notify(u"OptionsHint")
+
     def set_multi(self, value):
         self._multi = bool(value)
         self.notify(u"OptionsHint")
@@ -474,6 +484,7 @@ class DropRouteVM(pp_wpf.Notifier):
             u"multi": self._multi,
             u"move_chain": self._move_chain,
             u"riser_elev_mm": self.riser_elev_mm,
+            u"riser_cut": self._riser_cut,
         }
 
 
@@ -484,12 +495,13 @@ class DropRouteVM(pp_wpf.Notifier):
 class DropRouteWindow(object):
 
     def __init__(self, mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
-                 multi=False, move_chain=False, riser_elev_mm=None):
+                 multi=False, move_chain=False, riser_elev_mm=None,
+                 riser_cut=True):
         xaml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), u"ui.xaml")
 
         self.window = pp_wpf.load_window_file(xaml_path)
         self.vm = DropRouteVM(mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
-                              multi, move_chain, riser_elev_mm)
+                              multi, move_chain, riser_elev_mm, riser_cut)
         self.window.DataContext = self.vm
 
         self.accepted = False
@@ -524,6 +536,7 @@ class DropRouteWindow(object):
 
         find("ChkMulti").IsChecked = self.vm._multi
         find("ChkMoveChain").IsChecked = self.vm._move_chain
+        find("ChkRiserCut").IsChecked = self.vm._riser_cut
 
         combo = find("CmbLevel")
         combo.Items.Clear()
@@ -664,6 +677,14 @@ class DropRouteWindow(object):
         chk_equipment.Unchecked += on_move_chain
 
         @guard
+        def on_riser_cut(sender, args):
+            self.vm.set_riser_cut(sender.IsChecked)
+
+        chk_riser_cut = find("ChkRiserCut")
+        chk_riser_cut.Checked += on_riser_cut
+        chk_riser_cut.Unchecked += on_riser_cut
+
+        @guard
         def on_run(sender, args):
             self._accept()
 
@@ -722,8 +743,8 @@ class DropRouteWindow(object):
 
 def ask_settings(mode, angle, value_mm, levels=None, level_key=None,
                  ref_kind=None, elev_mm=None, multi=False, move_chain=False,
-                 riser_elev_mm=None):
+                 riser_elev_mm=None, riser_cut=True):
     return DropRouteWindow(
         mode, angle, value_mm, levels, level_key, ref_kind, elev_mm,
-        multi, move_chain, riser_elev_mm
+        multi, move_chain, riser_elev_mm, riser_cut
     ).show()

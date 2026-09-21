@@ -123,6 +123,12 @@ def load_settings():
     except:
         saved[u"riser_elev_mm"] = None
 
+    # Иначе стояк не построить: хвост за точкой разрыва должен уйти
+    try:
+        saved[u"riser_cut"] = bool(my_config.get_option("riser_cut", True))
+    except:
+        saved[u"riser_cut"] = True
+
     try:
         saved[u"multi"] = bool(my_config.get_option("multi", False))
     except:
@@ -159,6 +165,7 @@ def save_settings(result):
 
         my_config.multi = result[u"multi"]
         my_config.move_chain = result[u"move_chain"]
+        my_config.riser_cut = result.get(u"riser_cut", True)
 
         script.save_config()
     except:
@@ -183,6 +190,19 @@ ALLOWED_MOVE_CATEGORIES = [
     int(BuiltInCategory.OST_PipeAccessory),
     int(BuiltInCategory.OST_FlexPipeCurves)
 ]
+
+# «Системы воздуховодов» / «Трубопроводные системы» висят на каждом коннекторе
+# трассы, но это не элементы модели и продолжением трассы не являются
+SYSTEM_CATEGORIES = []
+
+for _name in ("OST_DuctSystem", "OST_PipingSystem"):
+    _bic = getattr(BuiltInCategory, _name, None)
+
+    if _bic is not None:
+        try:
+            SYSTEM_CATEGORIES.append(int(_bic))
+        except:
+            pass
 
 # Насколько ось примыкающего стояка должна быть вертикальной, чтобы он мог
 # «съесть» перепад высоты укорочением (1.0 = строго вертикально)
@@ -349,7 +369,8 @@ def ask_move_settings():
         saved[u"elev_mm"],
         saved[u"multi"],
         saved[u"move_chain"],
-        saved[u"riser_elev_mm"]
+        saved[u"riser_elev_mm"],
+        saved[u"riser_cut"]
     )
 
     if result is None:
@@ -774,6 +795,23 @@ def is_allowed_to_move(el):
     return get_category_id(el) in ALLOWED_MOVE_CATEGORIES
 
 
+def is_physical_element(el):
+    u"""Настоящий элемент модели, а не элемент системы у коннектора."""
+    if el is None:
+        return False
+
+    if get_category_id(el) in SYSTEM_CATEGORIES:
+        return False
+
+    try:
+        if el.Location is None:
+            return False
+    except:
+        return False
+
+    return True
+
+
 def is_curve_element(el):
     u"""Участок трассы (труба/воздуховод), а не фитинг и не оборудование."""
     try:
@@ -1138,12 +1176,12 @@ def restore_external_connections(connection_data, new_elements,
 
 
 def analyze_riser(mep, ctx, start, end, split, axis_unit, t_split,
-                  move_after_split, warnings):
+                  move_after_split, warnings, blocked_ids):
     u"""Режим «Стояк»: трасса обрезается и уходит вертикально до отметки.
 
-    Отвод сверху и горизонталь за ним не строятся. Хвост за точкой разрыва
-    исчезает вместе с исходным участком, поэтому если к нему что-то
-    подключено — отказ: чужие элементы инструмент не сносит.
+    Отвод сверху и горизонталь за ним не строятся, а всё, что было дальше
+    по трассе, удаляется — иначе стояк просто некуда поставить. Отмена в
+    Revit возвращает операцию одним шагом (TransactionGroup).
     """
     level = ctx[u"level"]
 
@@ -1171,8 +1209,16 @@ def analyze_riser(mep, ctx, start, end, split, axis_unit, t_split,
 
     # --- что подключено к обрезаемой стороне ---
     keep_connections = []
+    cut_start_ids = []
+    cut_int_ids = set()
 
     for item in remember_external_connections(mep):
+        owner = doc.GetElement(item["owner_id"])
+
+        # Элемент системы висит на каждом коннекторе и трассу не продолжает
+        if not is_physical_element(owner):
+            continue
+
         t = project_param_raw(item["origin"], start, end)
 
         if t is None:
@@ -1188,14 +1234,52 @@ def analyze_riser(mep, ctx, start, end, split, axis_unit, t_split,
             keep_connections.append(item)
             continue
 
-        other = doc.GetElement(item["owner_id"])
+        if item["owner_id"].IntegerValue not in cut_int_ids:
+            cut_int_ids.add(item["owner_id"].IntegerValue)
+            cut_start_ids.append(item["owner_id"])
 
-        raise Skip(
-            u"За точкой разрыва трасса продолжается: {}. Удалите продолжение "
-            u"сами — инструмент чужие элементы не сносит.".format(
-                element_label(other) if other is not None else u"подключенный элемент"
+    delete_ids = List[ElementId]()
+
+    if cut_start_ids:
+        if not ctx[u"riser_cut"]:
+            first = doc.GetElement(cut_start_ids[0])
+
+            raise Skip(
+                u"За точкой разрыва трасса продолжается: {}. Включите "
+                u"«Удалять продолжение трассы» или уберите его сами.".format(
+                    element_label(first) if first is not None else u"подключенный элемент"
+                )
             )
+
+        # Сам участок и остальные выбранные заблокированы, так что обход
+        # уходит только в хвост и не возвращается на остающуюся сторону
+        delete_ids = collect_connected_chain_from_start_ids(
+            cut_start_ids,
+            blocked_ids,
+            MAX_CHAIN_DEPTH
         )
+
+        chain_int_ids = set()
+
+        for eid in delete_ids:
+            chain_int_ids.add(eid.IntegerValue)
+
+        # Оборудование и прочее вне ALLOWED_MOVE_CATEGORIES не удаляем:
+        # оно просто останется без подключения
+        for int_id in cut_int_ids:
+            if int_id in chain_int_ids or int_id in blocked_ids:
+                continue
+
+            left = doc.GetElement(ElementId(int_id))
+
+            if left is None:
+                continue
+
+            warnings.append(
+                u"{}: {} не удалён, остался без подключения.".format(
+                    element_label(mep), element_label(left)
+                )
+            )
 
     riser_end = XYZ(split.X, split.Y, target_z)
 
@@ -1230,6 +1314,7 @@ def analyze_riser(mep, ctx, start, end, split, axis_unit, t_split,
         u"bend_axis": bend_axis,
         u"profile_use_x": profile_use_x,
         u"external_connections": keep_connections,
+        u"delete_ids": delete_ids,
         u"move_chain_ids": None,
         u"absorbers": [],
         u"warnings": warnings,
@@ -1266,8 +1351,34 @@ def apply_riser_plan(plan):
     if not ok:
         warnings.append(u"{}: не создан отвод: {}".format(plan[u"label"], err))
 
-    # Вместе с исходным участком уходит и его часть за точкой разрыва
-    doc.Delete(mep.Id)
+    # Вместе с исходным участком уходит всё, что было дальше по трассе
+    doomed = List[ElementId]()
+    doomed.Add(mep.Id)
+
+    for eid in plan[u"delete_ids"]:
+        if doc.GetElement(eid) is not None:
+            doomed.Add(eid)
+
+    deleted_count = doomed.Count - 1
+
+    try:
+        doc.Delete(doomed)
+    except Exception as ex:
+        # Каскадное удаление могло убрать часть элементов раньше очереди
+        deleted_count = 0
+
+        for eid in doomed:
+            try:
+                if doc.GetElement(eid) is not None:
+                    doc.Delete(eid)
+                    deleted_count += 1
+            except:
+                pass
+
+        deleted_count = max(deleted_count - 1, 0)
+
+        if doc.GetElement(mep.Id) is not None:
+            raise Exception(u"Не удалось удалить исходный участок: {}".format(unicode(ex)))
 
     restored, restore_skipped = restore_external_connections(
         plan[u"external_connections"],
@@ -1282,6 +1393,7 @@ def apply_riser_plan(plan):
         u"moved_count": 0,
         u"restored": len(restored),
         u"riser_labels": [],
+        u"deleted_count": deleted_count,
         u"warnings": warnings,
     }
 
@@ -1347,7 +1459,7 @@ def analyze_element(mep, p1, p2, ctx, blocked_ids):
 
         return analyze_riser(
             mep, ctx, start, end, split, axis_unit, t_split,
-            move_after_split, warnings
+            move_after_split, warnings, blocked_ids
         )
 
     if total_len < MIN_SEGMENT_FT * 2:
@@ -1759,6 +1871,7 @@ try:
         u"ref_kind": settings[u"ref_kind"],
         u"elev_mm": settings[u"elev_mm"],
         u"riser_elev_mm": settings.get(u"riser_elev_mm"),
+        u"riser_cut": settings.get(u"riser_cut", True),
         u"level": None,
         u"move_chain": move_chain,
     }
@@ -1946,7 +2059,12 @@ try:
     )
 
     if riser:
-        msg += u"\nПродолжение трассы за точкой разрыва обрезано."
+        total_deleted = sum(s.get(u"deleted_count", 0) for s in done)
+
+        if total_deleted:
+            msg += u"\nУдалено элементов продолжения: {}".format(total_deleted)
+        else:
+            msg += u"\nЗа точкой разрыва удалять было нечего."
     elif move_chain:
         msg += u"\nПеремещено связанных элементов: {}".format(total_moved)
     else:
