@@ -23,3 +23,8 @@ BACKUPS/
 
 # временный остаток от первого создания репозитория (удаляется git_очистка.bat)
 _git_old_удалить/
+
+# --- личные настройки плагина (создаются сами из значений по умолчанию) ---
+lib/pp_settings.json
+lib/pp_settings.json.bak
+lib/pp_settings*.invalid*
