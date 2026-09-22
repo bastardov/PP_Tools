@@ -11,7 +11,7 @@ set "SRC=%APPDATA%\pyRevit-Master\extensions\PP_Tools.extension\telemetry"
 
 REM --- Куда выгружать. ЗАМЕНИТЕ на свой путь: сетевая папка сервера или буква диска. ---
 REM  Примеры:
-REM    set "DST=\\192.168.1.10\backup\pp_usage"
+REM    set "DST=\\server\backup\pp_usage"
 REM    set "DST=Z:\pp_usage"
 set "DST=\\ИЗМЕНИТЕ_МЕНЯ\pp_usage"
 
